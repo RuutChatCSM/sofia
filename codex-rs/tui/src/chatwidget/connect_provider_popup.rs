@@ -42,7 +42,10 @@ pub(crate) struct ProviderConfig {
 }
 
 fn providers_config_path() -> String {
-    format!("{}/providers.json", codex_utils_home_dir::codex_home_string())
+    format!(
+        "{}/providers.json",
+        codex_utils_home_dir::codex_home_string()
+    )
 }
 
 pub(crate) fn load_providers_config() -> ProvidersConfig {
@@ -67,7 +70,10 @@ pub(crate) fn save_providers_config(config: &ProvidersConfig) -> Result<(), Stri
 /// Path to the engine's credential store (`sofia-auth.json`), which is the file
 /// the engine reads to resolve provider API keys (see `ModelProviderInfo::api_key`).
 fn sofia_auth_path() -> String {
-    format!("{}/sofia-auth.json", codex_utils_home_dir::codex_home_string())
+    format!(
+        "{}/sofia-auth.json",
+        codex_utils_home_dir::codex_home_string()
+    )
 }
 
 /// Write (or merge) an API key into `sofia-auth.json` under the given key name
@@ -166,7 +172,10 @@ pub(crate) fn build_provider_config_toml(
 const MODELS_DEV_CACHE_MAX_AGE_SECS: u64 = 24 * 60 * 60;
 
 pub(crate) fn load_providers() -> Vec<ProviderEntry> {
-    let cache_path = format!("{}/models_dev_cache.json", codex_utils_home_dir::codex_home_string());
+    let cache_path = format!(
+        "{}/models_dev_cache.json",
+        codex_utils_home_dir::codex_home_string()
+    );
 
     // Try cached catalog first (only if not expired).
     let cache_is_fresh = std::fs::metadata(&cache_path)
@@ -428,11 +437,7 @@ impl ChatWidget {
     /// Step 4: Show model picker for a configured provider.
     /// Kick off an async model-list fetch for a provider.  The result arrives
     /// as `AppEvent::ModelsFetched` — no blocking on the TUI thread.
-    pub(crate) fn fetch_models_for_provider(
-        &mut self,
-        provider_id: String,
-        provider_name: String,
-    ) {
+    pub(crate) fn fetch_models_for_provider(&mut self, provider_id: String, provider_name: String) {
         let config = load_providers_config();
         let Some(provider_config) = config.providers.get(&provider_id).cloned() else {
             self.add_error_message(format!("No config found for provider '{provider_id}'"));
@@ -451,11 +456,7 @@ impl ChatWidget {
 
     /// Step 4: Show model picker from a pre-fetched model list (called from the
     /// `ModelsFetched` event handler — no I/O on the TUI thread).
-    pub(crate) fn show_model_picker(
-        &mut self,
-        provider_id: String,
-        models: Vec<String>,
-    ) {
+    pub(crate) fn show_model_picker(&mut self, provider_id: String, models: Vec<String>) {
         if models.is_empty() {
             self.add_info_message(
                 format!("No models found for {provider_id}. Check your API key and base URL."),
@@ -577,8 +578,11 @@ fn fetch_models(base_url: &str, api_key: &str) -> Result<Vec<String>, String> {
         let _stderr = String::from_utf8_lossy(&result.stderr);
         let stdout = String::from_utf8_lossy(&result.stdout);
         // HTTP 401/403 → likely bad API key.
-        if stdout.contains(r#""error""#) && (stdout.contains("401") || stdout.contains("403")
-            || stdout.contains("unauthorized") || stdout.contains("Invalid API key"))
+        if stdout.contains(r#""error""#)
+            && (stdout.contains("401")
+                || stdout.contains("403")
+                || stdout.contains("unauthorized")
+                || stdout.contains("Invalid API key"))
         {
             return Err(format!(
                 "Authentication failed. Check your API key for this provider."
@@ -596,7 +600,10 @@ fn fetch_models(base_url: &str, api_key: &str) -> Result<Vec<String>, String> {
 
     // Check for error responses.
     if let Some(err) = data.get("error") {
-        let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown");
+        let msg = err
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("unknown");
         return Err(format!("Provider error: {msg}"));
     }
 
@@ -625,7 +632,10 @@ fn fetch_models(base_url: &str, api_key: &str) -> Result<Vec<String>, String> {
             return Ok(models);
         }
     }
-    Err("No models found in provider response. The provider may not expose a /models endpoint.".to_string())
+    Err(
+        "No models found in provider response. The provider may not expose a /models endpoint."
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

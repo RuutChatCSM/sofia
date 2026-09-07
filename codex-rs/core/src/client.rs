@@ -113,9 +113,9 @@ use tokio::sync::oneshot::error::TryRecvError;
 use tokio_tungstenite::tungstenite::Error;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
 use tracing::debug;
 use tracing::info;
+use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 use uuid::Uuid;
@@ -2122,7 +2122,9 @@ impl ModelClientSession {
         // Build the Chat Completions request body from the internal prompt format.
         let request_body = build_chat_completions_body(prompt, model_info, &effort)?;
         debug!(
-            body_size = serde_json::to_string(&request_body).map(|s| s.len()).unwrap_or(0),
+            body_size = serde_json::to_string(&request_body)
+                .map(|s| s.len())
+                .unwrap_or(0),
             "stream_chat_completions_api: request body built"
         );
 
@@ -2135,8 +2137,7 @@ impl ModelClientSession {
                 if attempt > 0 {
                     info!(
                         attempt,
-                        max_retries,
-                        "stream_chat_completions_api: retrying after previous failure"
+                        max_retries, "stream_chat_completions_api: retrying after previous failure"
                     );
                 }
                 let client_setup = self.client.current_client_setup().await?;
@@ -2174,13 +2175,38 @@ impl ModelClientSession {
                         let retryable = status.is_server_error()
                             || status == http::StatusCode::TOO_MANY_REQUESTS
                             || status == http::StatusCode::REQUEST_TIMEOUT;
-                        warn!(
-                            status = %status,
-                            attempt,
-                            retryable,
-                            body_len = body_str.len(),
-                            "stream_chat_completions_api: HTTP error"
-                        );
+                        // Log request body for 400 errors to diagnose provider incompatibility
+                        if status == http::StatusCode::BAD_REQUEST {
+                            let req_body_str = serde_json::to_string(&request_body)
+                                .unwrap_or_default();
+                            warn!(
+                                status = %status,
+                                attempt,
+                                req_body_len = req_body_str.len(),
+                                resp_body = %body_str,
+                                "stream_chat_completions_api: 400 Bad Request — request body logged"
+                            );
+                            // Truncate to first 2000 chars for readability
+                            if req_body_str.len() > 2000 {
+                                tracing::warn!(
+                                    req_body_preview = %req_body_str[..2000],
+                                    "stream_chat_completions_api: 400 request body preview (truncated)"
+                                );
+                            } else {
+                                tracing::warn!(
+                                    req_body = %req_body_str,
+                                    "stream_chat_completions_api: 400 request body"
+                                );
+                            }
+                        } else {
+                            warn!(
+                                status = %status,
+                                attempt,
+                                retryable,
+                                body_len = body_str.len(),
+                                "stream_chat_completions_api: HTTP error"
+                            );
+                        }
                         if retryable && attempt < max_retries {
                             let delay_ms = 500 * 2u64.pow(attempt);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
@@ -2198,32 +2224,33 @@ impl ModelClientSession {
                             )));
                             continue;
                         }
-                        return Err(CodexErr::from(CodexErrorDetails::UnexpectedStatus(
-                            UnexpectedResponseError {
-                                status,
-                                body: body_str,
-                                user_message: None,
-                                url: None,
-                                cf_ray: None,
-                                request_id: None,
-                                identity_error_code: None,
-                                identity_authorization_error: None,
-                            },
+                        return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(
+                            format!(
+                                "chat completions 400 Bad Request (non-retryable): {}",
+                                body_str.chars().take(500).collect::<String>()
+                            ),
                         )));
                     }
                     Err(e) => {
-                        // Transport-level error (DNS, connection refused, timeout).
+                        // Transport-level error — check if retryable before retrying.
                         warn!(
                             error = %e,
                             attempt,
+                            retryable = e.is_retryable(),
                             "stream_chat_completions_api: transport error"
                         );
+                        if !e.is_retryable() {
+                            return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(
+                                format!("chat completions transport error (non-retryable): {e}"),
+                            )));
+                        }
                         if attempt < max_retries {
                             let delay_ms = 500 * 2u64.pow(attempt);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            last_error = Some(CodexErr::from(CodexErrorDetails::Stream(
-                                format!("chat completions request failed (attempt {}): {e}", attempt + 1),
-                            )));
+                            last_error = Some(CodexErr::from(CodexErrorDetails::Stream(format!(
+                                "chat completions request failed (attempt {}): {e}",
+                                attempt + 1
+                            ))));
                             continue;
                         }
                         return Err(CodexErr::from(CodexErrorDetails::Stream(format!(
@@ -2255,6 +2282,8 @@ impl ModelClientSession {
             let mut byte_stream = stream_response.bytes;
             let mut line_buf = Vec::new();
             let mut text_content = String::new();
+            let text_item_id = ResponseItemId::new(&format!("{response_id}_msg"));
+            let mut text_started = false;
             let mut reasoning_started = false;
             let mut reasoning_item_id: Option<ResponseItemId> = None;
             let mut reasoning_text = String::new();
@@ -2318,10 +2347,23 @@ impl ModelClientSession {
                         for choice in choices {
                             if let Some(delta) = choice.get("delta") {
                                 // Text content.
-                                if let Some(text) =
-                                    delta.get("content").and_then(|c| c.as_str())
-                                {
+                                if let Some(text) = delta.get("content").and_then(|c| c.as_str()) {
                                     if !text.is_empty() {
+                                        if !text_started {
+                                            text_started = true;
+                                            let _ = tx
+                                                .send(Ok(ResponseEvent::OutputItemAdded(
+                                                    ResponseItem::Message {
+                                                        id: Some(text_item_id.clone()),
+                                                        role: "assistant".to_string(),
+                                                        content: Vec::new(),
+                                                        phase: None,
+                                                        internal_chat_message_metadata_passthrough:
+                                                            None,
+                                                    },
+                                                )))
+                                                .await;
+                                        }
                                         text_content.push_str(text);
                                         text_delta_count += 1;
                                         let _ = tx
@@ -2340,8 +2382,7 @@ impl ModelClientSession {
                                     if !reasoning.is_empty() {
                                         if !reasoning_started {
                                             reasoning_started = true;
-                                            let rid =
-                                                ResponseItemId::new("reasoning");
+                                            let rid = ResponseItemId::new("reasoning");
                                             reasoning_item_id = Some(rid.clone());
                                             let _ = tx
                                                 .send(Ok(ResponseEvent::OutputItemAdded(
@@ -2375,13 +2416,10 @@ impl ModelClientSession {
                                     delta.get("tool_calls").and_then(|t| t.as_array())
                                 {
                                     for tc in tool_calls {
-                                        let index = tc
-                                            .get("index")
-                                            .and_then(|i| i.as_u64())
-                                            .unwrap_or(0);
-                                        let entry = tool_call_buffers
-                                            .entry(index)
-                                            .or_insert_with(|| {
+                                        let index =
+                                            tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+                                        let entry =
+                                            tool_call_buffers.entry(index).or_insert_with(|| {
                                                 (
                                                     format!("{response_id}_tc_{index}"),
                                                     String::new(),
@@ -2426,9 +2464,7 @@ impl ModelClientSession {
                                 }
                             }
                             // Track finish_reason from the response.
-                            if let Some(fr) =
-                                choice.get("finish_reason").and_then(|r| r.as_str())
-                            {
+                            if let Some(fr) = choice.get("finish_reason").and_then(|r| r.as_str()) {
                                 if !fr.is_empty() {
                                     info!(finish_reason = %fr, "stream_chat_completions_api: finish_reason received");
                                     finish_reason = Some(fr.to_string());
@@ -2444,13 +2480,11 @@ impl ModelClientSession {
                         let input_tokens = usage_obj
                             .get("prompt_tokens")
                             .and_then(|v| v.as_u64())
-                            .unwrap_or(0)
-                            as i64;
+                            .unwrap_or(0) as i64;
                         let output_tokens = usage_obj
                             .get("completion_tokens")
                             .and_then(|v| v.as_u64())
-                            .unwrap_or(0)
-                            as i64;
+                            .unwrap_or(0) as i64;
                         let total_tokens = usage_obj
                             .get("total_tokens")
                             .and_then(|v| v.as_u64())
@@ -2485,15 +2519,13 @@ impl ModelClientSession {
                     }]
                 };
                 let _ = tx
-                    .send(Ok(ResponseEvent::OutputItemDone(
-                        ResponseItem::Reasoning {
-                            id: reasoning_item_id,
-                            summary: vec![],
-                            content: Some(content),
-                            encrypted_content: None,
-                            internal_chat_message_metadata_passthrough: None,
-                        },
-                    )))
+                    .send(Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
+                        id: reasoning_item_id,
+                        summary: vec![],
+                        content: Some(content),
+                        encrypted_content: None,
+                        internal_chat_message_metadata_passthrough: None,
+                    })))
                     .await;
             }
 
@@ -2548,15 +2580,13 @@ impl ModelClientSession {
             // Emit text message if there's content.
             if !text_content.is_empty() {
                 let _ = tx
-                    .send(Ok(ResponseEvent::OutputItemDone(
-                        ResponseItem::Message {
-                            id: Some(ResponseItemId::new("msg")),
-                            role: "assistant".to_string(),
-                            content: vec![ContentItem::OutputText { text: text_content }],
-                            phase: None,
-                            internal_chat_message_metadata_passthrough: None,
-                        },
-                    )))
+                    .send(Ok(ResponseEvent::OutputItemDone(ResponseItem::Message {
+                        id: Some(text_item_id),
+                        role: "assistant".to_string(),
+                        content: vec![ContentItem::OutputText { text: text_content }],
+                        phase: None,
+                        internal_chat_message_metadata_passthrough: None,
+                    })))
                     .await;
             }
 
@@ -3265,28 +3295,6 @@ fn strip_responses_only_fields(value: &mut serde_json::Value) {
     }
 }
 
-/// System prompt for Chat Completions providers. This is the single biggest
-/// factor in agent behavior — without a strong directive, models like MiMo
-/// explain what they will do instead of doing it, generate text between every
-/// tool call, and stop prematurely after receiving tool results.
-///
-/// Key behavioral requirements derived from analyzing GPT-5 Codex sessions:
-///   - Tool-first: act via tools, never narrate plans as text
-///   - Chaining: batch multiple independent tool calls in one response
-///   - No stopping: continue until the task is genuinely complete
-///   - Minimal commentary: brief transitions only, not explanations
-const TOOL_USE_DIRECTIVE: &str = "You are an autonomous coding agent with full tool access. Your job is to complete tasks by taking action.\n\n# Core Rules\n\n1. **Preamble then tools.** You may send a brief preamble (1\u{2013}2 sentences) before tool calls to orient the user. The preamble MUST always be in the same response as the tool calls \u{2014} never as a standalone text message.\n\n2. **Chain tool calls aggressively.** If you need to read a file and then edit it, call the read tool and the edit tool in the same response if you can. If you need to run 3 commands to accomplish a subtask, run all 3. Never call one tool, stop, write text, then call another tool.\n\n3. **Never stop mid-task.** When you receive tool results, your next response must either contain tool calls that continue the work OR a final completion message if the task is truly done. Never produce a text-only response that merely summarizes what you learned.\n\n4. **Only produce final text when complete.** A text response is your signal that the task is done. If the task is not done, you must call tools, not write text.\n\n# How to handle tool results\n\nWhen tool results arrive, evaluate them immediately and take the next action. Do not write commentary about the results \u{2014} use them to decide your next tool call. The only exception is if a tool call failed and you need to adjust your approach, in which case keep the explanation to one sentence.";
-
-/// Appended after tool results to prevent the model from stopping mid-task.
-/// This is added when the prompt ends with FunctionCallOutput items, signaling
-/// that tool results were just provided and the model should keep working.
-/// Combined with has_unresolved_tool_results in turn.rs, this creates a
-/// two-layer defense against mid-task stops:
-///   1. This prompt gives the model a strong instruction to continue (preventive)
-///   2. turn.rs detects stops after tool results and forces continuation (reactive)
-const TOOL_RESULT_CONTINUE: &str = "The above tool results contain information you need to continue your work. You MUST now call the next tool to continue the task. Do NOT write a text summary. Do NOT stop. Take the next concrete action immediately.";
-
-
 /// Build a Chat Completions request body from the internal prompt format.
 fn build_chat_completions_body(
     prompt: &Prompt,
@@ -3298,14 +3306,7 @@ fn build_chat_completions_body(
     let mut messages = Vec::new();
 
     // System instructions.
-    let system_text = &prompt.base_instructions.text;
-    let system_content = if system_text.is_empty() {
-        TOOL_USE_DIRECTIVE.to_string()
-    } else {
-        format!("{system_text}
-
-{TOOL_USE_DIRECTIVE}")
-    };
+    let system_content = &prompt.base_instructions.text;
     messages.push(json!({
         "role": "system",
         "content": system_content
@@ -3319,6 +3320,7 @@ fn build_chat_completions_body(
     // immediately before their tool outputs, so multi-step agent turns keep
     // working end to end.
     let mut pending_assistant_tool_calls: Vec<serde_json::Value> = Vec::new();
+    let mut skipped_tool_call_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     for item in &prompt.input {
         match item {
             ResponseItem::Message { role, content, .. } => {
@@ -3348,18 +3350,31 @@ fn build_chat_completions_body(
             } => {
                 // Tool outputs follow these calls; accumulate them so they can be
                 // emitted as an assistant message directly before the results.
-                pending_assistant_tool_calls.push(json!({
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "arguments": arguments,
-                    }
-                }));
+                // Skip malformed tool calls with empty function names —
+                // these cause 400 Bad Request from the provider and are
+                // not recoverable by retrying the same request body.
+                if !name.is_empty() {
+                    pending_assistant_tool_calls.push(json!({
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": arguments,
+                        }
+                    }));
+                } else {
+                    skipped_tool_call_ids.insert(call_id.clone());
+                }
             }
             ResponseItem::FunctionCallOutput {
                 call_id, output, ..
             } => {
+                // Skip orphaned tool outputs whose FunctionCall was skipped
+                // (e.g. malformed with empty function name). Emitting a tool
+                // message without a matching tool_calls entry causes a 400.
+                if skipped_tool_call_ids.contains(call_id) {
+                    continue;
+                }
                 // The assistant message with all accumulated tool calls must come
                 // before the tool results that reference them.
                 if !pending_assistant_tool_calls.is_empty() {
@@ -3388,27 +3403,6 @@ fn build_chat_completions_body(
         }));
     }
 
-    // --- State-based continuation prompt ---
-    // If the prompt ends with FunctionCallOutput items (i.e. tool results were
-    // just provided), append a trailing system message telling the model to keep
-    // working. This is NOT a heuristic on text content — it's based on
-    // observable conversation structure (tool results present = task in progress).
-    //
-    // The model will still be free to produce end_turn=true if it genuinely
-    // completed the task, but this gives it a strong signal that stopping here
-    // is wrong.
-    let last_is_tool_output = prompt
-        .input
-        .last()
-        .map(|item| matches!(item, ResponseItem::FunctionCallOutput { .. }))
-        .unwrap_or(false);
-    if last_is_tool_output {
-        messages.push(json!({
-            "role": "system",
-            "content": TOOL_RESULT_CONTINUE,
-        }));
-    }
-
     let model_slug = &model_info.slug;
     let mut request = json!({
         "model": model_slug,
@@ -3421,21 +3415,25 @@ fn build_chat_completions_body(
         "max_tokens": 32768,
     });
 
-    // Reasoning effort.
+    // Reasoning effort — only send when the model supports it. Non-OpenAI
+    // providers (xiaomi, groq, etc.) reject unknown top-level parameters with
+    // a 400 Bad Request.
     if let Some(effort) = effort {
-        let effort_str = match effort {
-            ReasoningEffortConfig::None => "none",
-            ReasoningEffortConfig::Minimal => "minimal",
-            ReasoningEffortConfig::Low => "low",
-            ReasoningEffortConfig::Medium => "medium",
-            ReasoningEffortConfig::High => "high",
-            ReasoningEffortConfig::XHigh => "high",
-            ReasoningEffortConfig::Max => "max",
-            ReasoningEffortConfig::Ultra => "max",
-            ReasoningEffortConfig::Custom(s) => s.as_str(),
-            ReasoningEffortConfig::Persistent => "persistent",
-        };
-        request["reasoning_effort"] = json!(effort_str);
+        if !model_info.supported_reasoning_levels.is_empty() {
+            let effort_str = match effort {
+                ReasoningEffortConfig::None => "none",
+                ReasoningEffortConfig::Minimal => "minimal",
+                ReasoningEffortConfig::Low => "low",
+                ReasoningEffortConfig::Medium => "medium",
+                ReasoningEffortConfig::High => "high",
+                ReasoningEffortConfig::XHigh => "high",
+                ReasoningEffortConfig::Max => "max",
+                ReasoningEffortConfig::Ultra => "max",
+                ReasoningEffortConfig::Custom(s) => s.as_str(),
+                ReasoningEffortConfig::Persistent => "persistent",
+            };
+            request["reasoning_effort"] = json!(effort_str);
+        }
     }
 
     // Tools.

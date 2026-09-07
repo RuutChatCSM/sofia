@@ -26,6 +26,24 @@ pub enum TransportError {
     Build(String),
 }
 
+impl TransportError {
+    /// Returns true if this transport error is transient and should be retried.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            TransportError::Http { status, .. } => {
+                status.is_server_error()
+                    || *status == StatusCode::TOO_MANY_REQUESTS
+                    || *status == StatusCode::REQUEST_TIMEOUT
+            }
+            TransportError::RetryLimit
+            | TransportError::Timeout
+            | TransportError::Connection(_)
+            | TransportError::Network(_) => true,
+            TransportError::Build(_) => false,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum StreamError {
     #[error("stream failed: {0}")]

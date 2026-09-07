@@ -1,0 +1,48 @@
+*** Begin Patch
+*** Update File: core/src/client.rs
+@@ Err(e) => {
+-                        // Transport-level error (DNS, connection refused, timeout).
+-                        warn!(
+-                            error = %e,
+-                            attempt,
+-                            "stream_chat_completions_api: transport error"
+-                        );
+-                        if attempt < max_retries {
+-                            let delay_ms = 500 * 2u64.pow(attempt);
+-                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+-                            last_error = Some(CodexErr::from(CodexErrorDetails::Stream(format!(
+-                                "chat completions request failed (attempt {}): {e}",
+-                                attempt + 1
+-                            ))));
+-                            continue;
+-                        }
+-                        return Err(CodexErr::from(CodexErrorDetails::Stream(format!(
+-                            "chat completions request failed after {} retries: {e}",
+-                            max_retries
+-                        ))));
++                        // Transport-level error — check if retryable before retrying.
++                        warn!(
++                            error = %e,
++                            attempt,
++                            retryable = e.is_retryable(),
++                            "stream_chat_completions_api: transport error"
++                        );
++                        if !e.is_retryable() {
++                            return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(
++                                format!("chat completions transport error (non-retryable): {e}"),
++                            )));
++                        }
++                        if attempt < max_retries {
++                            let delay_ms = 500 * 2u64.pow(attempt);
++                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
++                            last_error = Some(CodexErr::from(CodexErrorDetails::Stream(format!(
++                                "chat completions request failed (attempt {}): {e}",
++                                attempt + 1
++                            ))));
++                            continue;
++                        }
++                        return Err(CodexErr::from(CodexErrorDetails::Stream(format!(
++                            "chat completions request failed after {} retries: {e}",
++                            max_retries
++                        ))));
+*** End Patch

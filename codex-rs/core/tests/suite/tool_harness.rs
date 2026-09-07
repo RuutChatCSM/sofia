@@ -3,12 +3,16 @@
 use codex_core::TurnInputRequest;
 use core_test_support::test_codex::local_selections;
 use std::fs;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 use assert_matches::assert_matches;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
 use codex_protocol::items::TurnItem;
+use codex_model_provider_info::WireApi;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::plan_tool::StepStatus;
 use codex_protocol::protocol::AskForApproval;
@@ -33,6 +37,10 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use serde_json::Value;
 use serde_json::json;
+use wiremock::Mock;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::method;
+use wiremock::matchers::path;
 fn call_output(req: &ResponsesRequest, call_id: &str) -> (String, Option<bool>) {
     let raw = req.function_call_output(call_id);
     assert_eq!(
@@ -131,6 +139,130 @@ async fn exec_command_tool_executes_command_and_streams_output() -> anyhow::Resu
         r"(?s)^(?:Chunk ID: [^\n]+\n)?Wall time: [0-9]+(?:\.[0-9]+)? seconds\nProcess exited with code 0\n(?:Original token count: \d+\n)?Output:\ntool harness\n?$",
         &output_text,
     );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let response_count = Arc::clone(&request_count);
+    let tool_arguments = json!({
+        "cmd": "printf reviewed",
+        "login": false,
+    })
+    .to_string();
+    let tool_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-tool",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "type": "function",
+                        "function": {
+                            "name": "exec_command",
+                            "arguments": tool_arguments,
+                        },
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        })
+    );
+    let final_text = "Review complete; no changes were made.";
+    let final_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-final",
+            "choices": [{
+                "index": 0,
+                "delta": { "content": final_text },
+                "finish_reason": "stop",
+            }],
+        })
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_request: &wiremock::Request| {
+            let body = if response_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                tool_response.clone()
+            } else {
+                final_response.clone()
+            };
+            ResponseTemplate::new(/*status*/ 200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body)
+        })
+        .expect(/*requests*/ 2)
+        .mount(&server)
+        .await;
+
+    let mut builder = test_codex()
+        .with_model("test-gpt-5-codex")
+        .with_config(|config| {
+            config.model_provider.wire_api = WireApi::ChatCompletions;
+        });
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build_with_auto_env(&server).await?;
+    let session_model = session_configured.model.clone();
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+
+    codex
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "Review the implementation and report your findings.".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                collaboration_mode: Some(CollaborationMode {
+                    mode: ModeKind::Default,
+                    settings: Settings {
+                        model: session_model,
+                        reasoning_effort: None,
+                        developer_instructions: None,
+                    },
+                }),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    let mut saw_final_text = false;
+    wait_for_event(&codex, |event| match event {
+        EventMsg::AgentMessage(message) if message.message == final_text => {
+            saw_final_text = true;
+            false
+        }
+        EventMsg::TurnComplete(_) => true,
+        _ => false,
+    })
+    .await;
+
+    assert!(saw_final_text);
+    assert_eq!(request_count.load(Ordering::SeqCst), 2);
+    server.verify().await;
+
+    let requests = server.received_requests().await.unwrap();
+    let second_request: Value = serde_json::from_slice(&requests[1].body)?;
+    let messages = second_request["messages"].as_array().unwrap();
+    assert_eq!(messages.last().unwrap()["role"], "tool");
 
     Ok(())
 }

@@ -5746,6 +5746,13 @@
             "responses"
           ],
           "type": "string"
+        },
+        {
+          "description": "The Chat Completions API exposed by OpenAI-compatible providers at `/v1/chat/completions`. Used for MiMo, OpenRouter, Groq, Together, and any other provider that speaks the OpenAI chat format.",
+          "enum": [
+            "chatcompletions"
+          ],
+          "type": "string"
         }
       ]
     },

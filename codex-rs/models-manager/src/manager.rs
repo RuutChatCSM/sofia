@@ -449,17 +449,18 @@ impl OpenAiModelsManager {
 
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
+        let is_chatgpt_auth = self.auth_manager.as_ref().is_some_and(|auth_manager| {
+            auth_manager
+                .auth_mode()
+                .is_some_and(AuthMode::has_chatgpt_account)
+        });
         // Use the remote models list as the source of truth if it contains at least one
         // non-hidden model and the user is using ChatGPT auth.
         let should_use_remote_models_only = !models.is_empty()
             && models
                 .iter()
                 .any(|model| model.visibility == ModelVisibility::List)
-            && self.auth_manager.as_ref().is_some_and(|auth_manager| {
-                auth_manager
-                    .auth_mode()
-                    .is_some_and(AuthMode::has_chatgpt_account)
-            });
+            && is_chatgpt_auth;
         if should_use_remote_models_only {
             *self.remote_models.write().await = models;
             return;
@@ -467,6 +468,13 @@ impl OpenAiModelsManager {
 
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
         for model in models {
+            let mut model = model;
+            // Models returned by a non-ChatGPT provider's `/models` endpoint are by
+            // definition API-accessible. Without this, the `filter_by_auth` pass drops
+            // them because `supported_in_api` defaults to `false`.
+            if !is_chatgpt_auth && !model.supported_in_api {
+                model.supported_in_api = true;
+            }
             if let Some(existing_index) = existing_models
                 .iter()
                 .position(|existing| existing.slug == model.slug)
@@ -679,8 +687,7 @@ pub(crate) fn construct_model_info_from_candidates(
                 .as_ref()
                 .is_none_or(|t| t.is_empty())
             {
-                messages.instructions_template =
-                    Some(model_info::BASE_INSTRUCTIONS.to_string());
+                messages.instructions_template = Some(model_info::BASE_INSTRUCTIONS.to_string());
             }
         } else {
             remote.model_messages = Some(codex_protocol::openai_models::ModelMessages {

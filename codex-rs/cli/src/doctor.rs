@@ -2972,9 +2972,7 @@ fn credential_store_has(name: &str) -> bool {
     let codex_home = codex_utils_home_dir::codex_home_string();
     let mut candidates = vec![std::path::PathBuf::from(&codex_home)];
     // Also check legacy locations for backward compatibility.
-    if let Some(home) = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-    {
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
         let home = std::path::PathBuf::from(home);
         candidates.push(home.join(".sofia"));
         candidates.push(home.join(".config").join("sofia"));

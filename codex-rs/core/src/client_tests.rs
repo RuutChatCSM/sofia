@@ -1424,6 +1424,63 @@ fn chat_completions_body_reconstructs_assistant_tool_calls_before_tool_outputs()
 }
 
 #[test]
+fn chat_completions_body_does_not_force_continuation_after_tool_output() {
+    use crate::client::build_chat_completions_body;
+    use codex_protocol::ResponseItemId;
+    use codex_protocol::models::FunctionCallOutputPayload;
+
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "Review the implementation".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCall {
+                id: Some(ResponseItemId::new("fc1")),
+                name: "exec_command".to_string(),
+                namespace: None,
+                arguments: r#"{"cmd":"sed -n '1,40p' src/lib.rs"}"#.to_string(),
+                encrypted_function_args: None,
+                call_id: "call_1".to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: Some(ResponseItemId::new("fco1")),
+                call_id: Some("call_1".to_string()),
+                name: Some("exec_command".to_string()),
+                namespace: None,
+                output: FunctionCallOutputPayload::from_text("reviewed source".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "Respect the user's requested task scope.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+
+    assert_eq!(messages.len(), 4);
+    assert_eq!(
+        messages[0],
+        json!({
+            "role": "system",
+            "content": "Respect the user's requested task scope.",
+        })
+    );
+    assert_eq!(messages[3]["role"], "tool");
+    assert_eq!(messages[3]["content"], "reviewed source");
+}
+
+#[test]
 fn chat_completions_body_multi_iteration_reproduces_400() {
     use crate::client::build_chat_completions_body;
     use codex_protocol::ResponseItemId;

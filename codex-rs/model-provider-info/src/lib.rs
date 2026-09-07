@@ -367,33 +367,7 @@ impl ModelProviderInfo {
 
     /// Read the API key for `env_key` from `sofia-auth.json`, if present.
     fn api_key_from_auth_file(&self, env_key: &str) -> Option<String> {
-        let codex_home = codex_utils_home_dir::codex_home_string();
-        let mut candidates = vec![std::path::PathBuf::from(&codex_home)];
-        // Also check legacy locations for backward compatibility.
-        for home in home_dir().into_iter() {
-            candidates.push(home.join(".sofia"));
-            candidates.push(home.join(".config").join("sofia"));
-            candidates.push(home.join(".codex"));
-        }
-        // Deduplicate so we don't check the same dir twice.
-        candidates.sort();
-        candidates.dedup();
-        for candidate in candidates {
-            let file = candidate.join("sofia-auth.json");
-            let Ok(contents) = std::fs::read_to_string(&file) else {
-                continue;
-            };
-            let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents) else {
-                continue;
-            };
-            if let Some(value) = parsed.get(env_key).and_then(serde_json::Value::as_str) {
-                let trimmed = value.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
-            }
-        }
-        None
+        api_key_from_auth_file(env_key)
     }
 
     /// Effective maximum number of request retries for this provider.
@@ -822,7 +796,11 @@ pub fn discover_providers_from_env() -> HashMap<String, ModelProviderInfo> {
 
     // Well-known providers — prefer Responses API when supported.
     for wk in well_known_providers() {
-        if let Ok(key) = std::env::var(wk.env_key) {
+        let key = std::env::var(wk.env_key)
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| api_key_from_auth_file(wk.env_key));
+        if let Some(key) = key {
             if !key.trim().is_empty() {
                 let wire_api = if wk.supports_responses_api {
                     WireApi::Responses
@@ -904,4 +882,34 @@ fn home_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(std::path::PathBuf::from)
+}
+
+/// Read the API key for `env_key` from `sofia-auth.json`, if present.
+/// Searches `CODEX_HOME`, then legacy `~/.sofia`, `~/.config/sofia`, `~/.codex`.
+pub fn api_key_from_auth_file(env_key: &str) -> Option<String> {
+    let codex_home = codex_utils_home_dir::codex_home_string();
+    let mut candidates = vec![std::path::PathBuf::from(&codex_home)];
+    for home in home_dir().into_iter() {
+        candidates.push(home.join(".sofia"));
+        candidates.push(home.join(".config").join("sofia"));
+        candidates.push(home.join(".codex"));
+    }
+    candidates.sort();
+    candidates.dedup();
+    for candidate in candidates {
+        let file = candidate.join("sofia-auth.json");
+        let Ok(contents) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents) else {
+            continue;
+        };
+        if let Some(value) = parsed.get(env_key).and_then(serde_json::Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
 }

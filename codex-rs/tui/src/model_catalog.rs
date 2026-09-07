@@ -21,7 +21,6 @@ pub(crate) struct ModelCatalog {
     models: Arc<Mutex<Vec<ModelPreset>>>,
 }
 
-
 impl ModelCatalog {
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
