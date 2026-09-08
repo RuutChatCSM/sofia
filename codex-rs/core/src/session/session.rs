@@ -76,6 +76,11 @@ pub(crate) struct Session {
     pub(super) fork_persistence: ForkPersistence,
     pub(super) forked_from_ordinal_exclusive: Option<u64>,
     pub(super) next_internal_sub_id: AtomicU64,
+    /// Remaining forced sampling continuations for a premature narration-only
+    /// stop in the current turn. Reset to a bounded ceiling at the start of each
+    /// agent turn; decremented each time a turn is forcefully re-sampled so a
+    /// misbehaving model can never spin the request loop.
+    pub(super) narration_continuation_budget: AtomicU32,
 }
 
 #[derive(Clone)]
@@ -1537,6 +1542,7 @@ impl Session {
                 fork_persistence,
                 forked_from_ordinal_exclusive,
                 next_internal_sub_id: AtomicU64::new(0),
+                narration_continuation_budget: AtomicU32::new(0),
             });
             if let Some(network_policy_decider_session) = network_policy_decider_session {
                 let mut guard = network_policy_decider_session.write().await;

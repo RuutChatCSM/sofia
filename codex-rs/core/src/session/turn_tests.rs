@@ -5,6 +5,7 @@ use codex_protocol::ResponseItemId;
 use codex_protocol::items::AgentMessageContent;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use tracing_subscriber::prelude::*;
 
 struct RewriteAgentMessageContributor;
@@ -106,4 +107,84 @@ fn realtime_user_verification_notice_excludes_request_payload() {
             None,
         )),
     );
+}
+
+#[test]
+fn forced_continuation_triggers_for_short_narration_only_stop() {
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = "I’ve explored the repo; now checking the API route definitions.".to_string();
+    assert!(should_force_narration_continuation(
+        &budget,
+        /*chat_completions_wire*/ true,
+        &Some(narration),
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_refuses_long_narration_and_explicit_questions() {
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let expected = budget.load(Ordering::Relaxed);
+
+    let long_narration = Some("a".repeat(NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS + 1));
+    assert!(!should_force_narration_continuation(
+        &budget,
+        true,
+        &long_narration,
+        false,
+        false,
+    ));
+
+    let question = Some("This deletes the staging database. Should I proceed?".to_string());
+    assert!(!should_force_narration_continuation(
+        &budget, true, &question, false, false,
+    ));
+
+    assert_eq!(budget.load(Ordering::Relaxed), expected);
+}
+
+#[test]
+fn forced_continuation_never_fires_for_responses_wire_plan_mode_or_tool_calls() {
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = Some("Now patching the API route definitions.".to_string());
+
+    assert!(!should_force_narration_continuation(
+        &budget, /*chat_completions_wire*/ false, &narration, /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+    ));
+    assert!(!should_force_narration_continuation(
+        &budget, true, &narration, /*plan_mode*/ true, /*tool_calls_made*/ false,
+    ));
+    assert!(!should_force_narration_continuation(
+        &budget, true, &narration, /*plan_mode*/ false, /*tool_calls_made*/ true,
+    ));
+    assert!(!should_force_narration_continuation(
+        &budget, true, &None, /*plan_mode*/ false, /*tool_calls_made*/ false,
+    ));
+
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN
+    );
+}
+
+#[test]
+fn forced_continuation_is_bounded_by_per_turn_budget() {
+    let budget = AtomicU32::new(2);
+    let narration = Some("Now patching the API route definitions.".to_string());
+
+    assert!(should_force_narration_continuation(
+        &budget, true, &narration, false, false,
+    ));
+    assert!(should_force_narration_continuation(
+        &budget, true, &narration, false, false,
+    ));
+    assert!(!should_force_narration_continuation(
+        &budget, true, &narration, false, false,
+    ));
 }

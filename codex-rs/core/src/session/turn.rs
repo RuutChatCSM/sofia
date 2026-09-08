@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
 use crate::client::ModelClientSession;
@@ -79,6 +80,7 @@ use codex_file_system::FindUpErrorPolicy;
 use codex_file_system::find_nearest_ancestor_with_markers;
 use codex_login::CodexAuth;
 use codex_model_provider::RemoteCompactionSupport;
+use codex_model_provider_info::WireApi;
 use codex_protocol::ResponseItemId;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
@@ -146,6 +148,17 @@ pub(crate) struct McpStartupRequirements {
     required_plugins: HashSet<String>,
 }
 
+/// Bound on how many times a single agent turn may force-requeue a sampling
+/// request after a narration-only stop (no tool call) from a chat-completions
+/// provider. Kept small so a model that keeps ending with narration cannot spin
+/// the request loop; each forced continuation costs a fresh sampling request.
+const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 3;
+
+/// Narration shorter than this (characters) in a chat-completions turn that made
+/// no tool calls is treated as a suspected premature stop rather than a final
+/// answer. Final answers under reporting are typically longer or structured.
+const NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS: usize = 200;
+
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
 ///
@@ -168,6 +181,10 @@ pub(crate) async fn run_turn(
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<Option<String>> {
+    // Each agent turn gets a fresh budget for force-continuing narration-only
+    // stops; it is never shared across turns.
+    sess.narration_continuation_budget
+        .store(MAX_FORCED_CONTINUATIONS_PER_TURN, Ordering::Relaxed);
     // Record results from hooks that finished after the previous turn before this turn's user prompt.
     drain_async_hook_results(&sess, &turn_context, /*before_user_prompt*/ true).await;
 
@@ -2269,6 +2286,40 @@ fn assign_missing_streamed_response_item_id(
     Session::assign_missing_response_item_id(item);
 }
 
+/// Returns true when a chat-completions model ended its response with a short
+/// narration and no tool call — the signature of a premature stop where the
+/// model narrated the next step but forgot to request its tool. Re-sampling
+/// then nudges the model to pick the work back up, up to a bounded budget per
+/// turn (`MAX_FORCED_CONTINUATIONS_PER_TURN`). Never fires for Responses-wire
+/// providers (their `end_turn` is authoritative), plan mode, responses that
+/// already made tool calls, or responses that ask the user a question.
+fn should_force_narration_continuation(
+    narration_continuation_budget: &AtomicU32,
+    chat_completions_wire: bool,
+    last_agent_message: &Option<String>,
+    plan_mode: bool,
+    tool_calls_made: bool,
+) -> bool {
+    if tool_calls_made || plan_mode || !chat_completions_wire {
+        return false;
+    }
+    let Some(message) = last_agent_message.as_deref() else {
+        return false;
+    };
+    let asks_user = matches!(
+        message.trim_end().chars().next_back(),
+        Some('?') | Some('？')
+    );
+    if asks_user || message.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS {
+        return false;
+    }
+    narration_continuation_budget
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
+            remaining.checked_sub(1)
+        })
+        .is_ok()
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(level = "trace",
     skip_all,
@@ -2653,6 +2704,8 @@ async fn try_run_sampling_request(
                 usage_metadata,
                 end_turn,
             } => {
+                let response_tool_call_ids = std::mem::take(&mut analytics_tool_call_ids);
+                let tool_calls_made = !response_tool_call_ids.is_empty();
                 sess.services
                     .analytics_events_client
                     .track_code_mode_tool_call(
@@ -2660,7 +2713,7 @@ async fn try_run_sampling_request(
                             thread_id: sess.thread_id.to_string(),
                             turn_id: turn_context.sub_id.clone(),
                             response_id: response_id.clone(),
-                            tool_call_ids: std::mem::take(&mut analytics_tool_call_ids),
+                            tool_call_ids: response_tool_call_ids,
                         },
                     );
                 flush_assistant_text_segments_all(
@@ -2686,6 +2739,26 @@ async fn try_run_sampling_request(
                     break Err(err);
                 }
                 if let Some(false) = end_turn {
+                    needs_follow_up = true;
+                } else if should_force_narration_continuation(
+                    &sess.narration_continuation_budget,
+                    matches!(
+                        turn_context.provider.info().wire_api,
+                        WireApi::ChatCompletions
+                    ),
+                    &last_agent_message,
+                    plan_mode,
+                    tool_calls_made,
+                ) {
+                    info!(
+                        narration_chars = last_agent_message
+                            .as_ref()
+                            .map(|message| message.chars().count()),
+                        budget_remaining =
+                            sess.narration_continuation_budget.load(Ordering::Relaxed),
+                        "force-continuing precedence-stop: chat-completions reply was short \
+                         narration with no tool call"
+                    );
                     needs_follow_up = true;
                 }
                 break Ok(SamplingRequestResult {

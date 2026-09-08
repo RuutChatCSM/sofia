@@ -2542,13 +2542,19 @@ impl ModelClientSession {
 
             // Set end_turn based on finish_reason.
             //
-            // Only set end_turn = false when the model explicitly requests tool
-            // execution via finish_reason == "tool_calls". For "stop" (or any
-            // other/missing reason) always signal end_turn = true — a premature
-            // stop is recoverable by re-prompting, whereas a false-negative
-            // text heuristic that sets end_turn = false causes an infinite loop.
+            // Set end_turn = false when the model requests tool execution
+            // (finish_reason == "tool_calls") or was truncated by the output
+            // token limit (finish_reason == "length"). A truncated response is
+            // incomplete and rolling the turn over lets the model continue where
+            // it left off instead of silently dropping the partial work.
+            //
+            // For "stop" (or any other/missing reason) signal end_turn = true.
+            // While a narration-only stop may look premature, forcing
+            // continuation on every stop risks an infinite re-prompt loop; the
+            // model-side contract forbids narration-only stops while work
+            // remains, and turn.rs applies a bounded forced continuation there.
             let end_turn = match finish_reason.as_deref() {
-                Some("tool_calls") => Some(false),
+                Some("tool_calls") | Some("length") => Some(false),
                 _ => Some(true),
             };
 

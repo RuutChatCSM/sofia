@@ -35,8 +35,10 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
+use core_test_support::wait_for_event_with_timeout;
 use serde_json::Value;
 use serde_json::json;
+use std::time::Duration;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
@@ -263,6 +265,114 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
     let second_request: Value = serde_json::from_slice(&requests[1].body)?;
     let messages = second_request["messages"].as_array().unwrap();
     assert_eq!(messages.last().unwrap()["role"], "tool");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -> anyhow::Result<()>
+{
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let response_count = Arc::clone(&request_count);
+    // Four short narration-only stops. The first three are force-continued
+    // (bounded budget of 3 per turn); the fourth exhausts the budget and the
+    // turn ends instead of re-prompting forever.
+    let narration_responses: Vec<String> = (0..4)
+        .map(|_| {
+            format!(
+                "data: {}\n\ndata: [DONE]\n\n",
+                json!({
+                    "id": "chatcmpl-narration",
+                    "choices": [{
+                        "index": 0,
+                        "delta": { "content": "I’ll review the implementation now." },
+                        "finish_reason": "stop",
+                    }],
+                })
+            )
+        })
+        .collect();
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_request: &wiremock::Request| {
+            let body = narration_responses[response_count.fetch_add(1, Ordering::SeqCst)].clone();
+            ResponseTemplate::new(/*status*/ 200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body)
+        })
+        .expect(/*requests*/ 4)
+        .mount(&server)
+        .await;
+
+    let mut builder = test_codex()
+        .with_model("test-gpt-5-codex")
+        .with_config(|config| {
+            config.model_provider.wire_api = WireApi::ChatCompletions;
+        });
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build_with_auto_env(&server).await?;
+    let session_model = session_configured.model.clone();
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+
+    codex
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "Review the implementation and report your findings.".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                collaboration_mode: Some(CollaborationMode {
+                    mode: ModeKind::Default,
+                    settings: Settings {
+                        model: session_model,
+                        reasoning_effort: None,
+                        developer_instructions: None,
+                    },
+                }),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    wait_for_event_with_timeout(
+        &codex,
+        |event| matches!(event, EventMsg::TurnComplete(_)),
+        Duration::from_secs(30),
+    )
+    .await;
+
+    // Exactly the budgeted number of sampling requests: 1 original + 3 forced
+    // continuations. The 4th narration-only stop is not re-prompted, proving
+    // the continuation is bounded and cannot loop forever.
+    assert_eq!(request_count.load(Ordering::SeqCst), 4);
+    server.verify().await;
+
+    let requests = server.received_requests().await.unwrap();
+    for (index, request) in requests.iter().enumerate().skip(1) {
+        let body: Value = serde_json::from_slice(&request.body)?;
+        let messages = body["messages"].as_array().unwrap();
+        // Each continuation feeds the prior narration-only assistant message
+        // back so the re-sampled request continues from the same step.
+        assert_eq!(
+            messages.last().unwrap()["role"],
+            "assistant",
+            "request {index}"
+        );
+    }
 
     Ok(())
 }
