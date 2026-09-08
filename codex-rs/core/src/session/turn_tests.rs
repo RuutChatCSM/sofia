@@ -169,13 +169,22 @@ fn forced_continuation_triggers_for_short_narration_only_stop() {
     let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
     let narration = Some("Review complete; no changes were made.".to_string());
     assert!(!should_force_narration_continuation(
-        &budget, /*chat_completions_wire*/ true, &narration, /*plan_mode*/ false,
-        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
+        &budget,
+        /*chat_completions_wire*/ true,
+        &narration,
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     // A completion report the same turn a tool failed is NOT terminal evidence:
     // stopping on an unresolved failure is still premature.
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Failed,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -202,7 +211,7 @@ fn forced_continuation_triggers_for_long_narration_declaring_remaining_work() {
         &Some(narration),
         /*plan_mode*/ false,
         /*tool_calls_made*/ false,
-        /*last_executed_tool_failed*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -222,7 +231,7 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
         &ambiguous_long,
         false,
         false,
-        /*last_executed_tool_failed*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 
     let completed = Some(
@@ -236,7 +245,12 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
             > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
     );
     assert!(!should_force_narration_continuation(
-        &budget, true, &completed, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &completed,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 
     // Long "let me know"-style closings read as completions, not remaining work
@@ -252,12 +266,22 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
             > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
     );
     assert!(!should_force_narration_continuation(
-        &budget, true, &closing, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &closing,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 
     let question = Some("This deletes the staging database. Should I proceed?".to_string());
     assert!(!should_force_narration_continuation(
-        &budget, true, &question, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &question,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 
     assert_eq!(budget.load(Ordering::Relaxed), expected);
@@ -269,20 +293,36 @@ fn forced_continuation_never_fires_for_responses_wire_plan_mode_or_tool_calls() 
     let narration = Some("Now patching the API route definitions.".to_string());
 
     assert!(!should_force_narration_continuation(
-        &budget, /*chat_completions_wire*/ false, &narration, /*plan_mode*/ false,
-        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
+        &budget,
+        /*chat_completions_wire*/ false,
+        &narration,
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert!(!should_force_narration_continuation(
-        &budget, true, &narration, /*plan_mode*/ true, /*tool_calls_made*/ false,
-        /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &narration,
+        /*plan_mode*/ true,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert!(!should_force_narration_continuation(
-        &budget, true, &narration, /*plan_mode*/ false, /*tool_calls_made*/ true,
-        /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &narration,
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ true,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert!(!should_force_narration_continuation(
-        &budget, true, &None, /*plan_mode*/ false, /*tool_calls_made*/ false,
-        /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &None,
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 
     assert_eq!(
@@ -297,13 +337,28 @@ fn forced_continuation_is_bounded_by_per_turn_budget() {
     let narration = Some("Now patching the API route definitions.".to_string());
 
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     assert!(!should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
 }
 
@@ -314,13 +369,22 @@ fn forced_continuation_refuses_short_narration_reporting_completed_outcome() {
     let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
     let narration = Some("Review complete; no changes were made.".to_string());
     assert!(!should_force_narration_continuation(
-        &budget, /*chat_completions_wire*/ true, &narration, /*plan_mode*/ false,
-        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
+        &budget,
+        /*chat_completions_wire*/ true,
+        &narration,
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
     ));
     // A completion report the same turn a tool failed is NOT terminal evidence:
     // stopping on an unresolved failure is still premature.
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Failed,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -345,7 +409,7 @@ fn forced_continuation_triggers_after_failed_tool_without_forward_markers() {
         &Some(narration),
         /*plan_mode*/ false,
         /*tool_calls_made*/ false,
-        /*last_executed_tool_failed*/ true,
+        /*last_executed_tool*/ ExecutedToolOutcome::Failed,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -362,7 +426,99 @@ fn forced_continuation_refuses_failed_tool_when_narration_asks_question() {
             .to_string(),
     );
     assert!(!should_force_narration_continuation(
-        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Failed,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN
+    );
+}
+
+#[test]
+fn forced_continuation_triggers_after_mutation_with_short_completed_outcome() {
+    // A bare mutation (apply_patch/plan update) followed by a one-line completion
+    // report is NOT terminal evidence: the mutation still needs verification.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = Some("Patch applied; the change is complete.".to_string());
+    assert!(should_force_narration_continuation(
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Mutated,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_triggers_after_mutation_with_long_completed_outcome() {
+    // The stage-3 flagship case: a long narration that CLAIMS completion right
+    // after a mutation is force-continued for verification evidence, even though
+    // the same text is final when the last tool succeeded read-only.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = "The migration is complete and the full suite is green; nothing else \
+        remains. There is no outstanding work left to do here. The controller was verified \
+        end to end, all pages render in both color modes, and no further changes are planned."
+        .to_string();
+    assert!(narration.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS);
+    assert!(reports_completed_outcome(&narration));
+    assert!(should_force_narration_continuation(
+        &budget,
+        true,
+        &Some(narration),
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Mutated,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_refuses_completed_narration_when_verification_ran() {
+    // The identical text is final once a non-mutating tool (tests, grep-diff)
+    // executed after the mutation: verification evidence backs the claim.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = "The migration is complete and the full suite is green; nothing else \
+        remains. There is no outstanding work left to do here. The controller was verified \
+        end to end, all pages render in both color modes, and no further changes are planned."
+        .to_string();
+    assert!(!should_force_narration_continuation(
+        &budget,
+        true,
+        &Some(narration),
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Unremarkable,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN
+    );
+}
+
+#[test]
+fn forced_continuation_refuses_mutation_when_narration_asks_question() {
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = Some("The patch is in. Shall I run the integration suite now?".to_string());
+    assert!(!should_force_narration_continuation(
+        &budget,
+        true,
+        &narration,
+        false,
+        false,
+        /*last_executed_tool*/ ExecutedToolOutcome::Mutated,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),

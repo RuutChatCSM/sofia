@@ -6643,6 +6643,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         next_internal_sub_id: AtomicU64::new(0),
         narration_continuation_budget: AtomicU32::new(0),
         last_executed_tool_failed: AtomicBool::new(false),
+        last_executed_tool_mutated: AtomicBool::new(false),
     };
     let per_turn_config =
         session.build_per_turn_config(&session_configuration, session_configuration.cwd().clone());
@@ -8951,6 +8952,7 @@ where
         next_internal_sub_id: AtomicU64::new(0),
         narration_continuation_budget: AtomicU32::new(0),
         last_executed_tool_failed: AtomicBool::new(false),
+        last_executed_tool_mutated: AtomicBool::new(false),
     });
     let per_turn_config =
         session.build_per_turn_config(&session_configuration, session_configuration.cwd().clone());

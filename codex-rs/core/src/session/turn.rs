@@ -189,6 +189,8 @@ pub(crate) async fn run_turn(
         .store(MAX_FORCED_CONTINUATIONS_PER_TURN, Ordering::Relaxed);
     sess.last_executed_tool_failed
         .store(false, Ordering::Relaxed);
+    sess.last_executed_tool_mutated
+        .store(false, Ordering::Relaxed);
     // Record results from hooks that finished after the previous turn before this turn's user prompt.
     drain_async_hook_results(&sess, &turn_context, /*before_user_prompt*/ true).await;
 
@@ -2270,6 +2272,10 @@ async fn drain_in_flight(
                 if let Some(success) = executed_tool_result_success(&envelope.item) {
                     sess.last_executed_tool_failed
                         .store(!success, Ordering::Relaxed);
+                    sess.last_executed_tool_mutated.store(
+                        success && tool_result_mutates_state(&envelope.item),
+                        Ordering::Relaxed,
+                    );
                 }
                 sess.record_annotated_conversation_items(&turn_context, vec![envelope])
                     .await;
@@ -2299,6 +2305,20 @@ fn executed_tool_result_success(item: &ResponseItem) -> Option<bool> {
         ResponseItem::ToolSearchOutput { status, .. } => Some(status != "error"),
         _ => None,
     }
+}
+
+/// Whether a drained tool result mutated persistent state (by tool name). The
+/// canonical mutators are the patch and plan editors plus stdin-writers;
+/// read-only executors and checks are deliberately excluded so passing tests and
+/// grep-diff verification never count as mutations.
+fn tool_result_mutates_state(item: &ResponseItem) -> bool {
+    const MUTATING_TOOLS: [&str; 4] = ["apply_patch", "write_stdin", "update_plan", "plan"];
+    let name = match item {
+        ResponseItem::FunctionCallOutput { name, .. }
+        | ResponseItem::CustomToolCallOutput { name, .. } => name.as_deref(),
+        _ => None,
+    };
+    name.is_some_and(|name| MUTATING_TOOLS.contains(&name))
 }
 
 /// The process exit code from the canonical codex shell-result format
@@ -2331,6 +2351,23 @@ fn assign_missing_streamed_response_item_id(
     Session::assign_missing_response_item_id(item);
 }
 
+/// The classification of the most recently executed tool result in the turn,
+/// feeding the narration-continuation gate. Everything not flagged as a failed
+/// execution or a successful mutation reads as an ordinary settled step: the
+/// narration-only stop can still be treated as final.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExecutedToolOutcome {
+    /// No failed execution and no successful mutation recorded (no tool yet,
+    /// an unstructured result, or the last tool succeeded read-only).
+    Unremarkable,
+    /// The last tool succeeded but mutated persistent state, so a completed
+    /// outcome claim still needs verification evidence.
+    Mutated,
+    /// The last tool produced an error result, so the turn must not end on the
+    /// unresolved failure.
+    Failed,
+}
+
 /// Returns true when a chat-completions model ended its response with narration
 /// and no tool call — the signature of a premature stop where the model narrated
 /// the next step but forgot to request its tool. Re-sampling then nudges the
@@ -2340,12 +2377,15 @@ fn assign_missing_streamed_response_item_id(
 /// already made tool calls, or responses that hand control back to the user with
 /// a question.
 ///
-/// Three evidence classes trigger a continuation:
+/// Four evidence classes trigger a continuation:
 ///   - the narration explicitly declares further work that it never performs
 ///     ("I need to ...", "Let me also check ..."), at any length;
 ///   - the most recently executed tool call failed and nothing has succeeded
-///     since (`last_executed_tool_failed`), so the turn ends on an unresolved
-///     error even if the narration does not announce more work;
+///     since (`last_executed_tool` is `Failed`), so the turn ends on an
+///     unresolved error even if the narration does not announce more work;
+///   - the most recently executed tool call mutated state and nothing has
+///     verified it since (`last_executed_tool` is `Mutated`), so a completed
+///     outcome claim over a bare mutation lacks evidence;
 ///   - short narration on its own is suspicious (a trailing thought the model
 ///     probably intended to act on) — but only when it does not read as a
 ///     completed outcome report, so genuine one-line summaries ("Review
@@ -2356,7 +2396,7 @@ fn should_force_narration_continuation(
     last_agent_message: &Option<String>,
     plan_mode: bool,
     tool_calls_made: bool,
-    last_executed_tool_failed: bool,
+    last_executed_tool: ExecutedToolOutcome,
 ) -> bool {
     if tool_calls_made || plan_mode || !chat_completions_wire {
         return false;
@@ -2369,7 +2409,7 @@ fn should_force_narration_continuation(
     }
     let declares_remaining_work = declares_remaining_work(message);
     if !declares_remaining_work
-        && !last_executed_tool_failed
+        && matches!(last_executed_tool, ExecutedToolOutcome::Unremarkable)
         && (reports_completed_outcome(message)
             || message.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS)
     {
@@ -2901,13 +2941,21 @@ async fn try_run_sampling_request(
                     // by the gate. This also clears a stale follow-up flag from
                     // an earlier tool-call iteration of this turn. Other wires
                     // keep their existing end_turn semantics untouched.
+                    let last_executed_tool =
+                        if sess.last_executed_tool_failed.load(Ordering::Relaxed) {
+                            ExecutedToolOutcome::Failed
+                        } else if sess.last_executed_tool_mutated.load(Ordering::Relaxed) {
+                            ExecutedToolOutcome::Mutated
+                        } else {
+                            ExecutedToolOutcome::Unremarkable
+                        };
                     needs_follow_up = should_force_narration_continuation(
                         &sess.narration_continuation_budget,
                         /*chat_completions_wire*/ true,
                         &last_agent_message,
                         plan_mode,
                         tool_calls_made,
-                        sess.last_executed_tool_failed.load(Ordering::Relaxed),
+                        last_executed_tool,
                     );
                     if needs_follow_up {
                         info!(
@@ -2920,8 +2968,7 @@ async fn try_run_sampling_request(
                             reports_completed_outcome = last_agent_message
                                 .as_ref()
                                 .is_some_and(|message| reports_completed_outcome(message)),
-                            last_executed_tool_failed =
-                                sess.last_executed_tool_failed.load(Ordering::Relaxed),
+                            last_executed_tool = ?last_executed_tool,
                             budget_remaining =
                                 sess.narration_continuation_budget.load(Ordering::Relaxed),
                             "force-continuing precedence-stop: chat-completions reply was \

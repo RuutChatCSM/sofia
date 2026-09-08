@@ -86,6 +86,13 @@ pub(crate) struct Session {
     /// tool results drain; a narration-only stop following a failed tool without
     /// any later successful execution is treated as premature.
     pub(super) last_executed_tool_failed: AtomicBool,
+    /// Whether the most recently executed tool call in the current turn
+    /// succeeded but mutated persistent state (apply_patch, write_stdin, plan
+    /// updates). Cleared at the start of each agent turn and updated as tool
+    /// results drain; a narration-only stop following such a mutation is not
+    /// final until the model provides verification evidence, so completed
+    /// outcome claims right after one are force-continued.
+    pub(super) last_executed_tool_mutated: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -1549,6 +1556,7 @@ impl Session {
                 next_internal_sub_id: AtomicU64::new(0),
                 narration_continuation_budget: AtomicU32::new(0),
                 last_executed_tool_failed: AtomicBool::new(false),
+                last_executed_tool_mutated: AtomicBool::new(false),
             });
             if let Some(network_policy_decider_session) = network_policy_decider_session {
                 let mut guard = network_policy_decider_session.write().await;

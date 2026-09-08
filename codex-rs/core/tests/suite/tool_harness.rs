@@ -541,6 +541,152 @@ async fn chat_completions_stop_after_failed_tool_is_force_continued() -> anyhow:
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_completions_mutation_then_completed_outcome_is_force_continued() -> anyhow::Result<()>
+{
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let response_count = Arc::clone(&request_count);
+    // apply_patch is modeled on the chat wire as a function whose sole argument
+    // is the patch text; a successful apply_patch is the flagship mutation.
+    let patch_content = "*** Begin Patch\n*** Add File: notes.txt\n+tool harness apply patch mutation\n*** End Patch";
+    let patch_arguments = json!({ "command": patch_content }).to_string();
+    let tool_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-tool-patch",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "type": "function",
+                        "function": {
+                            "name": "apply_patch",
+                            "arguments": patch_arguments,
+                        },
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        })
+    );
+    // Short completed-outcome narration right after the mutation: only the
+    // mutation-obligation signal can force the continuation (a bare mutation
+    // without verification evidence is never final).
+    let applied = "Patch applied; the change is complete.";
+    let applied_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-patch-applied",
+            "choices": [{
+                "index": 0,
+                "delta": { "content": applied },
+                "finish_reason": "stop",
+            }],
+        })
+    );
+    let handback = "Should I run the tests to verify the change?";
+    let handback_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-patch-handback",
+            "choices": [{
+                "index": 0,
+                "delta": { "content": handback },
+                "finish_reason": "stop",
+            }],
+        })
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_request: &wiremock::Request| {
+            let body = match response_count.fetch_add(1, Ordering::SeqCst) {
+                0 => tool_response.clone(),
+                1 => applied_response.clone(),
+                _ => handback_response.clone(),
+            };
+            ResponseTemplate::new(/*status*/ 200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body)
+        })
+        .expect(/*requests*/ 3)
+        .mount(&server)
+        .await;
+
+    let mut builder = test_codex()
+        .with_model("test-gpt-5-codex")
+        .with_config(|config| {
+            config.model_provider.wire_api = WireApi::ChatCompletions;
+        });
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build_with_auto_env(&server).await?;
+    let session_model = session_configured.model.clone();
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+
+    codex
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "Apply the patch and report when done.".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                collaboration_mode: Some(CollaborationMode {
+                    mode: ModeKind::Default,
+                    settings: Settings {
+                        model: session_model,
+                        reasoning_effort: None,
+                        developer_instructions: None,
+                    },
+                }),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    let mut saw_applied = false;
+    let mut saw_handback = false;
+    wait_for_event_with_timeout(
+        &codex,
+        |event| match event {
+            EventMsg::AgentMessage(message) if message.message == applied => {
+                saw_applied = true;
+                false
+            }
+            EventMsg::AgentMessage(message) if message.message == handback => {
+                saw_handback = true;
+                false
+            }
+            EventMsg::TurnComplete(_) => true,
+            _ => false,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+
+    assert!(saw_applied);
+    assert!(saw_handback);
+    // apply_patch tool-call + the completed-outcome claim that was force-continued
+    // (bare mutation != verified) + the handback question that finally terminates.
+    assert_eq!(request_count.load(Ordering::SeqCst), 3);
+    server.verify().await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn update_plan_tool_emits_plan_update_event() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
