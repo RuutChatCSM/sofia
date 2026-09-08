@@ -316,6 +316,12 @@ pub struct ConfigToml {
     /// Token budget applied when storing tool/function outputs in the context manager.
     pub tool_output_token_limit: Option<usize>,
 
+    /// Maximum number of narration-only continuation nudges a single agent turn
+    /// may issue before the model is allowed to stop. Higher values give the
+    /// model more retries when it prematurely declares work complete, but each
+    /// extra nudge adds latency and cost. Defaults to `3`.
+    pub narration_continuation_budget: Option<u32>,
+
     /// Maximum poll window for background terminal output (`write_stdin`), in milliseconds.
     /// Default: `300000` (5 minutes).
     pub background_terminal_max_timeout: Option<u64>,

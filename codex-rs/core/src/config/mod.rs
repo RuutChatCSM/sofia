@@ -634,6 +634,12 @@ pub struct Config {
     /// active context or only tokens after the carried compaction-window prefix.
     pub model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope,
 
+    /// Maximum number of narration-only continuation nudges a single agent turn
+    /// may issue before the model is allowed to stop. See
+    /// [`crate::session::turn::MAX_FORCED_CONTINUATIONS_PER_TURN`] for the
+    /// built-in default.
+    pub narration_continuation_budget: u32,
+
     /// Key into the model_providers map that specifies which provider to use.
     pub model_provider_id: String,
 
@@ -4158,6 +4164,9 @@ impl Config {
             model_auto_compact_token_limit_scope: cfg
                 .model_auto_compact_token_limit_scope
                 .unwrap_or_default(),
+            narration_continuation_budget: cfg
+                .narration_continuation_budget
+                .unwrap_or(3),
             model_provider_id,
             model_provider,
             cwd: resolved_cwd,

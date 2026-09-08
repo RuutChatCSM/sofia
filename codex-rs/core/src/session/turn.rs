@@ -152,6 +152,8 @@ pub(crate) struct McpStartupRequirements {
 /// request after a narration-only stop (no tool call) from a chat-completions
 /// provider. Kept small so a model that keeps ending with narration cannot spin
 /// the request loop; each forced continuation costs a fresh sampling request.
+/// Overridden by `narration_continuation_budget` in config.toml when present.
+#[allow(dead_code)]
 const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 3;
 
 /// Narration at or below this many characters (in a chat-completions turn that
@@ -185,8 +187,10 @@ pub(crate) async fn run_turn(
 ) -> CodexResult<Option<String>> {
     // Each agent turn gets a fresh budget for force-continuing narration-only
     // stops; it is never shared across turns.
-    sess.narration_continuation_budget
-        .store(MAX_FORCED_CONTINUATIONS_PER_TURN, Ordering::Relaxed);
+    sess.narration_continuation_budget.store(
+        turn_context.config.narration_continuation_budget,
+        Ordering::Relaxed,
+    );
     sess.last_executed_tool_failed
         .store(false, Ordering::Relaxed);
     sess.last_executed_tool_mutated
