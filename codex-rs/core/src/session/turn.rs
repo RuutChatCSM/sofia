@@ -155,9 +155,10 @@ pub(crate) struct McpStartupRequirements {
 const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 3;
 
 /// Narration at or below this many characters (in a chat-completions turn that
-/// made no tool calls) is treated as a suspected premature stop regardless of
-/// its phrasing. Longer narration only triggers a forced continuation when it
-/// explicitly declares still-remaining work (see `declares_remaining_work`).
+/// made no tool calls) is treated as a suspected premature stop unless it reads
+/// as a completed outcome report. Longer narration only triggers a forced
+/// continuation when it explicitly declares still-remaining work (see
+/// `declares_remaining_work`) or follows a failed tool execution.
 const NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS: usize = 200;
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
@@ -186,6 +187,8 @@ pub(crate) async fn run_turn(
     // stops; it is never shared across turns.
     sess.narration_continuation_budget
         .store(MAX_FORCED_CONTINUATIONS_PER_TURN, Ordering::Relaxed);
+    sess.last_executed_tool_failed
+        .store(false, Ordering::Relaxed);
     // Record results from hooks that finished after the previous turn before this turn's user prompt.
     drain_async_hook_results(&sess, &turn_context, /*before_user_prompt*/ true).await;
 
@@ -2261,6 +2264,13 @@ async fn drain_in_flight(
                     &envelope.item,
                 )
                 .await;
+                // Keep the turn's "last executed tool result" ledger honest:
+                // only a drained tool result can clear or set it, so claims in
+                // later narration never count as evidence.
+                if let Some(success) = executed_tool_result_success(&envelope.item) {
+                    sess.last_executed_tool_failed
+                        .store(!success, Ordering::Relaxed);
+                }
                 sess.record_annotated_conversation_items(&turn_context, vec![envelope])
                     .await;
             }
@@ -2270,6 +2280,40 @@ async fn drain_in_flight(
         }
     }
     Ok(())
+}
+
+/// The success/failure of a drained tool result, when the omitted item carries a
+/// structured outcome. Tool outputs are tagged with `output.success`; web-search
+/// style outputs carry a status string instead.
+fn executed_tool_result_success(item: &ResponseItem) -> Option<bool> {
+    match item {
+        ResponseItem::FunctionCallOutput { output, .. }
+        | ResponseItem::CustomToolCallOutput { output, .. } => {
+            if let Some(text) = output.body.to_text()
+                && let Some(exit_code) = exec_exit_code(&text)
+            {
+                return Some(exit_code == 0);
+            }
+            output.success
+        }
+        ResponseItem::ToolSearchOutput { status, .. } => Some(status != "error"),
+        _ => None,
+    }
+}
+
+/// The process exit code from the canonical codex shell-result format
+/// ("Process exited with code N"), using the last reported line so a compound
+/// command's histogram settles on its final status.
+fn exec_exit_code(text: &str) -> Option<i32> {
+    const PREFIX: &str = "process exited with code ";
+    let lower = text.to_lowercase();
+    let index = lower.rfind(PREFIX)?;
+    let digits: String = lower[index + PREFIX.len()..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '-')
+        .take(8)
+        .collect();
+    digits.parse::<i32>().ok()
 }
 
 fn assign_missing_streamed_response_item_id(
@@ -2296,15 +2340,23 @@ fn assign_missing_streamed_response_item_id(
 /// already made tool calls, or responses that hand control back to the user with
 /// a question.
 ///
-/// Short narration is suspicious on its own. Long narration is only suspicious
-/// when it declares further work that the model then never performs (e.g. "I
-/// need to restore the method... Let me also check what the block outputs now").
+/// Three evidence classes trigger a continuation:
+///   - the narration explicitly declares further work that it never performs
+///     ("I need to ...", "Let me also check ..."), at any length;
+///   - the most recently executed tool call failed and nothing has succeeded
+///     since (`last_executed_tool_failed`), so the turn ends on an unresolved
+///     error even if the narration does not announce more work;
+///   - short narration on its own is suspicious (a trailing thought the model
+///     probably intended to act on) — but only when it does not read as a
+///     completed outcome report, so genuine one-line summaries ("Review
+///     complete; no changes were made.") are never force-continued.
 fn should_force_narration_continuation(
     narration_continuation_budget: &AtomicU32,
     chat_completions_wire: bool,
     last_agent_message: &Option<String>,
     plan_mode: bool,
     tool_calls_made: bool,
+    last_executed_tool_failed: bool,
 ) -> bool {
     if tool_calls_made || plan_mode || !chat_completions_wire {
         return false;
@@ -2315,8 +2367,12 @@ fn should_force_narration_continuation(
     if ends_by_asking_user(message) {
         return false;
     }
-    let short = message.chars().count() <= NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS;
-    if !short && !declares_remaining_work(message) {
+    let declares_remaining_work = declares_remaining_work(message);
+    if !declares_remaining_work
+        && !last_executed_tool_failed
+        && (reports_completed_outcome(message)
+            || message.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS)
+    {
         return false;
     }
     narration_continuation_budget
@@ -2374,6 +2430,42 @@ fn declares_remaining_work(message: &str) -> bool {
         return false;
     }
     FORWARD_MARKERS
+        .iter()
+        .any(|marker| message.contains(marker))
+}
+
+/// Cheap, model-free detection that a narration-only reply reports a finished
+/// outcome rather than trailing off toward an intended action. Guards the short
+/// narration continuation trigger so genuine one-line summaries are not
+/// force-continued (a real failure mode observed after the tool-call finish
+/// reason: "Review complete; no changes were made.").
+fn reports_completed_outcome(message: &str) -> bool {
+    const COMPLETION_MARKERS: [&str; 22] = [
+        "complete",
+        "completed",
+        "done",
+        "finished",
+        "all green",
+        "passing",
+        "no changes",
+        "no further",
+        "nothing left",
+        "nothing remains",
+        "as expected",
+        "successfully",
+        "verified",
+        "confirmed",
+        "no issues",
+        "no modifications",
+        "worked",
+        "returned",
+        "the result",
+        "the findings",
+        "summary",
+        "will leave it",
+    ];
+    let message = message.to_lowercase();
+    COMPLETION_MARKERS
         .iter()
         .any(|marker| message.contains(marker))
 }
@@ -2797,34 +2889,47 @@ async fn try_run_sampling_request(
                     break Err(err);
                 }
                 if let Some(false) = end_turn {
+                    // The response still carries tool calls to execute; the outer
+                    // loop must re-sample after they drain.
                     needs_follow_up = true;
-                } else if should_force_narration_continuation(
-                    &sess.narration_continuation_budget,
-                    matches!(
-                        turn_context.provider.info().wire_api,
-                        WireApi::ChatCompletions
-                    ),
-                    &last_agent_message,
-                    plan_mode,
-                    tool_calls_made,
+                } else if matches!(
+                    turn_context.provider.info().wire_api,
+                    WireApi::ChatCompletions
                 ) {
-                    info!(
-                        narration_chars = last_agent_message
-                            .as_ref()
-                            .map(|message| message.chars().count()),
-                        short_narration = last_agent_message.as_ref().is_some_and(|message| {
-                            message.chars().count() <= NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
-                        }),
-                        declares_remaining_work = last_agent_message
-                            .as_ref()
-                            .is_some_and(|message| declares_remaining_work(message)),
-                        budget_remaining =
-                            sess.narration_continuation_budget.load(Ordering::Relaxed),
-                        "force-continuing precedence-stop: chat-completions reply was narration \
-                         with no tool call that has not asked the user and does not report a \
-                         completed outcome"
+                    // A chat-completions narration-only stop: the model had no
+                    // tools in flight, so whether to continue is decided entirely
+                    // by the gate. This also clears a stale follow-up flag from
+                    // an earlier tool-call iteration of this turn. Other wires
+                    // keep their existing end_turn semantics untouched.
+                    needs_follow_up = should_force_narration_continuation(
+                        &sess.narration_continuation_budget,
+                        /*chat_completions_wire*/ true,
+                        &last_agent_message,
+                        plan_mode,
+                        tool_calls_made,
+                        sess.last_executed_tool_failed.load(Ordering::Relaxed),
                     );
-                    needs_follow_up = true;
+                    if needs_follow_up {
+                        info!(
+                            narration_chars = last_agent_message
+                                .as_ref()
+                                .map(|message| message.chars().count()),
+                            declares_remaining_work = last_agent_message
+                                .as_ref()
+                                .is_some_and(|message| declares_remaining_work(message)),
+                            reports_completed_outcome = last_agent_message
+                                .as_ref()
+                                .is_some_and(|message| reports_completed_outcome(message)),
+                            last_executed_tool_failed =
+                                sess.last_executed_tool_failed.load(Ordering::Relaxed),
+                            budget_remaining =
+                                sess.narration_continuation_budget.load(Ordering::Relaxed),
+                            "force-continuing precedence-stop: chat-completions reply was \
+                             narration with no tool call that has not asked the user, did \
+                             not report a completed outcome, and was not preceded by a \
+                             successful action"
+                        );
+                    }
                 }
                 break Ok(SamplingRequestResult {
                     needs_follow_up,

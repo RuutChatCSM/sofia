@@ -247,14 +247,18 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
         .await?;
 
     let mut saw_final_text = false;
-    wait_for_event(&codex, |event| match event {
-        EventMsg::AgentMessage(message) if message.message == final_text => {
-            saw_final_text = true;
-            false
-        }
-        EventMsg::TurnComplete(_) => true,
-        _ => false,
-    })
+    wait_for_event_with_timeout(
+        &codex,
+        |event| match event {
+            EventMsg::AgentMessage(message) if message.message == final_text => {
+                saw_final_text = true;
+                false
+            }
+            EventMsg::TurnComplete(_) => true,
+            _ => false,
+        },
+        Duration::from_secs(30),
+    )
     .await;
 
     assert!(saw_final_text);
@@ -382,6 +386,156 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
             "request {index}"
         );
     }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_completions_stop_after_failed_tool_is_force_continued() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let response_count = Arc::clone(&request_count);
+    let failing_tool_arguments = json!({
+        "cmd": "false",
+        "login": false,
+    })
+    .to_string();
+    let tool_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-tool-fail",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "type": "function",
+                        "function": {
+                            "name": "exec_command",
+                            "arguments": failing_tool_arguments,
+                        },
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        })
+    );
+    // Long narration describing the failure with NO forward-looking markers, so
+    // only the failed-tool-now-unresolved signal can force the continuation.
+    let failure_narration = "The verification command reported a nonzero exit, so the \
+        workspace state was not measured and no configuration was applied. The harness \
+        returned early, and the previously recorded baseline remains in place without \
+        any attempt to continue the checks."
+        .to_string();
+    assert!(failure_narration.chars().count() > 200);
+    let failure_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-fail-report",
+            "choices": [{
+                "index": 0,
+                "delta": { "content": failure_narration },
+                "finish_reason": "stop",
+            }],
+        })
+    );
+    let handback = "Should I retry the verification with a corrected command?";
+    let handback_response = format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        json!({
+            "id": "chatcmpl-handback",
+            "choices": [{
+                "index": 0,
+                "delta": { "content": handback },
+                "finish_reason": "stop",
+            }],
+        })
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_request: &wiremock::Request| {
+            let body = match response_count.fetch_add(1, Ordering::SeqCst) {
+                0 => tool_response.clone(),
+                1 => failure_response.clone(),
+                _ => handback_response.clone(),
+            };
+            ResponseTemplate::new(/*status*/ 200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body)
+        })
+        .expect(/*requests*/ 3)
+        .mount(&server)
+        .await;
+
+    let mut builder = test_codex()
+        .with_model("test-gpt-5-codex")
+        .with_config(|config| {
+            config.model_provider.wire_api = WireApi::ChatCompletions;
+        });
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build_with_auto_env(&server).await?;
+    let session_model = session_configured.model.clone();
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+
+    codex
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "Run the verification and report the outcome.".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                collaboration_mode: Some(CollaborationMode {
+                    mode: ModeKind::Default,
+                    settings: Settings {
+                        model: session_model,
+                        reasoning_effort: None,
+                        developer_instructions: None,
+                    },
+                }),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    let mut saw_failure_narration = false;
+    let mut saw_handback = false;
+    wait_for_event_with_timeout(
+        &codex,
+        |event| match event {
+            EventMsg::AgentMessage(message) if message.message == failure_narration => {
+                saw_failure_narration = true;
+                false
+            }
+            EventMsg::AgentMessage(message) if message.message == handback => {
+                saw_handback = true;
+                false
+            }
+            EventMsg::TurnComplete(_) => true,
+            _ => false,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+
+    assert!(saw_failure_narration);
+    assert!(saw_handback);
+    // Original tool-call response + the narration report that was force-continued
+    // + the handback question that finally terminates the turn.
+    assert_eq!(request_count.load(Ordering::SeqCst), 3);
+    server.verify().await;
 
     Ok(())
 }

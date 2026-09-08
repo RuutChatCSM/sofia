@@ -167,13 +167,15 @@ fn realtime_user_verification_notice_excludes_request_payload() {
 #[test]
 fn forced_continuation_triggers_for_short_narration_only_stop() {
     let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
-    let narration = "I’ve explored the repo; now checking the API route definitions.".to_string();
+    let narration = Some("Review complete; no changes were made.".to_string());
+    assert!(!should_force_narration_continuation(
+        &budget, /*chat_completions_wire*/ true, &narration, /*plan_mode*/ false,
+        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
+    ));
+    // A completion report the same turn a tool failed is NOT terminal evidence:
+    // stopping on an unresolved failure is still premature.
     assert!(should_force_narration_continuation(
-        &budget,
-        /*chat_completions_wire*/ true,
-        &Some(narration),
-        /*plan_mode*/ false,
-        /*tool_calls_made*/ false,
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -200,6 +202,7 @@ fn forced_continuation_triggers_for_long_narration_declaring_remaining_work() {
         &Some(narration),
         /*plan_mode*/ false,
         /*tool_calls_made*/ false,
+        /*last_executed_tool_failed*/ false,
     ));
     assert_eq!(
         budget.load(Ordering::Relaxed),
@@ -219,6 +222,7 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
         &ambiguous_long,
         false,
         false,
+        /*last_executed_tool_failed*/ false,
     ));
 
     let completed = Some(
@@ -232,7 +236,7 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
             > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
     );
     assert!(!should_force_narration_continuation(
-        &budget, true, &completed, false, false,
+        &budget, true, &completed, false, false, /*last_executed_tool_failed*/ false,
     ));
 
     // Long "let me know"-style closings read as completions, not remaining work
@@ -248,12 +252,12 @@ fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questio
             > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
     );
     assert!(!should_force_narration_continuation(
-        &budget, true, &closing, false, false,
+        &budget, true, &closing, false, false, /*last_executed_tool_failed*/ false,
     ));
 
     let question = Some("This deletes the staging database. Should I proceed?".to_string());
     assert!(!should_force_narration_continuation(
-        &budget, true, &question, false, false,
+        &budget, true, &question, false, false, /*last_executed_tool_failed*/ false,
     ));
 
     assert_eq!(budget.load(Ordering::Relaxed), expected);
@@ -266,16 +270,19 @@ fn forced_continuation_never_fires_for_responses_wire_plan_mode_or_tool_calls() 
 
     assert!(!should_force_narration_continuation(
         &budget, /*chat_completions_wire*/ false, &narration, /*plan_mode*/ false,
-        /*tool_calls_made*/ false,
+        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
     ));
     assert!(!should_force_narration_continuation(
         &budget, true, &narration, /*plan_mode*/ true, /*tool_calls_made*/ false,
+        /*last_executed_tool_failed*/ false,
     ));
     assert!(!should_force_narration_continuation(
         &budget, true, &narration, /*plan_mode*/ false, /*tool_calls_made*/ true,
+        /*last_executed_tool_failed*/ false,
     ));
     assert!(!should_force_narration_continuation(
         &budget, true, &None, /*plan_mode*/ false, /*tool_calls_made*/ false,
+        /*last_executed_tool_failed*/ false,
     ));
 
     assert_eq!(
@@ -290,12 +297,75 @@ fn forced_continuation_is_bounded_by_per_turn_budget() {
     let narration = Some("Now patching the API route definitions.".to_string());
 
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false,
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
     ));
     assert!(should_force_narration_continuation(
-        &budget, true, &narration, false, false,
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
     ));
     assert!(!should_force_narration_continuation(
-        &budget, true, &narration, false, false,
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ false,
     ));
+}
+
+#[test]
+fn forced_continuation_refuses_short_narration_reporting_completed_outcome() {
+    // A genuine one-line report after tool work must terminate, not re-sample:
+    // this is the text that regressed when short narration was blindly continued.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = Some("Review complete; no changes were made.".to_string());
+    assert!(!should_force_narration_continuation(
+        &budget, /*chat_completions_wire*/ true, &narration, /*plan_mode*/ false,
+        /*tool_calls_made*/ false, /*last_executed_tool_failed*/ false,
+    ));
+    // A completion report the same turn a tool failed is NOT terminal evidence:
+    // stopping on an unresolved failure is still premature.
+    assert!(should_force_narration_continuation(
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_triggers_after_failed_tool_without_forward_markers() {
+    // A long narration describing the failure with no forward-looking markers is
+    // still premature: the turn ends on an unresolved failed tool result.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = "The verification command reported a nonzero exit, so the workspace state \
+        was not measured and no configuration was applied. The harness returned early, and \
+        the previously recorded baseline remains in place without any attempt to continue \
+        the checks."
+        .to_string();
+    assert!(narration.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS);
+    assert!(should_force_narration_continuation(
+        &budget,
+        /*chat_completions_wire*/ true,
+        &Some(narration),
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+        /*last_executed_tool_failed*/ true,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_refuses_failed_tool_when_narration_asks_question() {
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = Some(
+        "The commit failed because the working tree has uncommitted changes. \
+        Shall I stash them and retry?"
+            .to_string(),
+    );
+    assert!(!should_force_narration_continuation(
+        &budget, true, &narration, false, false, /*last_executed_tool_failed*/ true,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN
+    );
 }
