@@ -42,6 +42,7 @@ expression: commands
 /logout - log out of Codex
 /exit - exit Codex
 /feedback - send logs to maintainers
+/connect - connect to a model provider and configure API keys
 /rollout - print the rollout file path
 /ps - list background terminals
 /stop - stop all background terminals

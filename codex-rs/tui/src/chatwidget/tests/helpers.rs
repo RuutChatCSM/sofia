@@ -313,7 +313,11 @@ pub(crate) fn set_fast_mode_test_catalog(chat: &mut ChatWidget) {
     .map(Into::into)
     .collect();
 
-    Arc::make_mut(&mut chat.model_catalog).models = models;
+    Arc::make_mut(&mut chat.model_catalog)
+        .models
+        .lock()
+        .unwrap()
+        .clone_from(&models);
 }
 
 pub(crate) async fn make_chatwidget_manual_with_sender() -> (
