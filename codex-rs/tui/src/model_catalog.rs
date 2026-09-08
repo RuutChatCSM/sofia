@@ -1,5 +1,6 @@
-//! TUI model inventory and user-facing labels; wire requests retain their original model slugs.
+//! TUI model and collaboration inventories; refreshing models preserves the server mode catalog.
 
+use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::openai_models::ModelPreset;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -18,14 +19,21 @@ pub(crate) fn model_display_name(model: &str) -> &str {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ModelCatalog {
-    models: Arc<Mutex<Vec<ModelPreset>>>,
+    pub(crate) models: Arc<Mutex<Vec<ModelPreset>>>,
+    pub(crate) collaboration_modes: Vec<CollaborationModeMask>,
 }
 
 impl ModelCatalog {
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
             models: Arc::new(Mutex::new(models)),
+            collaboration_modes: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_collaboration_modes(mut self, modes: Vec<CollaborationModeMask>) -> Self {
+        self.collaboration_modes = modes;
+        self
     }
 
     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {

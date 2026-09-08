@@ -1966,12 +1966,20 @@ impl AnalyticsReducer {
                         .get(&notification.turn_id)
                         .and_then(|turn| turn.resolved_config.as_ref())
                         .and_then(|config| config.turn_metadata.root_turn_id());
+                    // Fast collaborator tools can complete before their sampling response.
+                    // Keep the event until that response can supply its originating ID.
+                    let emission =
+                        if matches!(&notification.item, ThreadItem::CollabAgentToolCall { .. }) {
+                            ToolEventEmission::AwaitResponse
+                        } else {
+                            ToolEventEmission::ImmediateUnlessCorrelated
+                        };
                     self.record_tool_event(
                         &notification.thread_id,
                         &notification.turn_id,
                         root_turn_id,
                         event,
-                        ToolEventEmission::ImmediateUnlessCorrelated,
+                        emission,
                         out,
                     );
                 }
@@ -2055,6 +2063,7 @@ impl AnalyticsReducer {
             thread_id,
             turn_id,
             item_id,
+            originator,
             plugin_id,
             execution_id,
             operation,
@@ -2070,6 +2079,7 @@ impl AnalyticsReducer {
                             thread_id: thread_id.clone(),
                             turn_id: turn_id.clone(),
                             item_id: item_id.clone(),
+                            originator: originator.clone(),
                             plugin_id: plugin_id.clone(),
                             execution_id: execution_id.clone(),
                             operation: operation.clone(),
@@ -2092,6 +2102,11 @@ impl AnalyticsReducer {
         out: &mut Vec<TrackEventRequest>,
     ) {
         let session_source: SessionSource = thread.source.into();
+        let is_worktree =
+            codex_git_utils::repository_identity(thread.cwd.as_path()).and_then(|_| {
+                codex_git_utils::get_git_repo_root(thread.cwd.canonicalize().ok()?.as_path())
+                    .map(|root| root.join(".git").is_file())
+            });
         let session_id = thread.session_id;
         let thread_id = thread.id;
         let parent_thread_id = thread.parent_thread_id;
@@ -2123,6 +2138,7 @@ impl AnalyticsReducer {
                     runtime: connection_state.runtime.clone(),
                     model,
                     ephemeral: thread.ephemeral,
+                    is_worktree,
                     thread_source: thread_metadata.thread_source,
                     initialization_mode,
                     subagent_source: thread_metadata.subagent_source.clone(),

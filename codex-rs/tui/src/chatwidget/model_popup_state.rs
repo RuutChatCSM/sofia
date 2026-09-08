@@ -36,7 +36,11 @@ impl ChatWidget {
         {
             return false;
         }
-        self.model_catalog = Arc::new(ModelCatalog::new(presets));
+        Arc::make_mut(&mut self.model_catalog)
+            .models
+            .lock()
+            .unwrap()
+            .clone_from(&presets);
         self.refresh_effective_service_tier();
         self.refresh_model_dependent_surfaces();
         true

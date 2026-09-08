@@ -8,11 +8,11 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use assert_matches::assert_matches;
+use codex_model_provider_info::WireApi;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
 use codex_protocol::items::TurnItem;
-use codex_model_provider_info::WireApi;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::plan_tool::StepStatus;
 use codex_protocol::protocol::AskForApproval;

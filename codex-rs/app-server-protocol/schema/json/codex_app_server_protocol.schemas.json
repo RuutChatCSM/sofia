@@ -7482,6 +7482,40 @@
       "AppToolsConfig": {
         "type": "object"
       },
+      "ApplicationNetworkRequirements": {
+        "properties": {
+          "domains": {
+            "additionalProperties": {
+              "$ref": "#/definitions/v2/NetworkDomainPermission"
+            },
+            "type": "object"
+          },
+          "enabled": {
+            "description": "When enabled, only explicitly allowed exact domains may be contacted.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domains",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "ApplicationRequirements": {
+        "properties": {
+          "network": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ApplicationNetworkRequirements"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ApprovalsReviewer": {
         "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
         "enum": [
@@ -8059,6 +8093,12 @@
             ]
           },
           "allowHistoryAccess": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "allowWebmcp": {
             "type": [
               "boolean",
               "null"
@@ -12494,7 +12534,7 @@
                 "type": "string"
               },
               "cwd": {
-                "$ref": "#/definitions/v2/AbsolutePathBuf"
+                "$ref": "#/definitions/v2/LegacyAppPathString"
               },
               "source": {
                 "$ref": "#/definitions/v2/GuardianCommandSource"
@@ -12587,11 +12627,11 @@
           {
             "properties": {
               "cwd": {
-                "$ref": "#/definitions/v2/AbsolutePathBuf"
+                "$ref": "#/definitions/v2/LegacyAppPathString"
               },
               "files": {
                 "items": {
-                  "$ref": "#/definitions/v2/AbsolutePathBuf"
+                  "$ref": "#/definitions/v2/LegacyAppPathString"
                 },
                 "type": "array"
               },
@@ -14547,6 +14587,13 @@
               "$ref": "#/definitions/v2/Tool"
             },
             "type": "object"
+          },
+          "toolsError": {
+            "description": "Tool discovery failed and no catalog was returned. Null when a catalog is returned, including cached or empty catalogs.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -19000,7 +19047,7 @@
               }
             ],
             "default": null,
-            "description": "Where to run the review: inline (default) on the current thread or detached on a new thread (returned in `reviewThreadId`)."
+            "description": "Where to run the review: inline (default) on the current thread or detached on a new thread (returned in `reviewThreadId`). Detached delivery is deprecated and emits `deprecationNotice`. Use `thread/start` followed by an inline review for a separate review thread."
           },
           "target": {
             "$ref": "#/definitions/v2/ReviewTarget"
@@ -20305,6 +20352,13 @@
               "null"
             ]
           },
+          "originator": {
+            "description": "Originator recorded when the thread was created, independent of its current client or executor. Null when the recorded originator is unavailable.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "parentThreadId": {
             "description": "The ID of the parent thread. This will only be set if this thread is a subagent.",
             "type": [
@@ -20551,6 +20605,29 @@
           "threadId"
         ],
         "title": "ThreadDeletedNotification",
+        "type": "object"
+      },
+      "ThreadEnvironment": {
+        "description": "An environment selected by a loaded thread, independent of connection status.",
+        "properties": {
+          "cwd": {
+            "$ref": "#/definitions/v2/LegacyAppPathString"
+          },
+          "environmentId": {
+            "type": "string"
+          },
+          "runtimeWorkspaceRoots": {
+            "items": {
+              "$ref": "#/definitions/v2/LegacyAppPathString"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cwd",
+          "environmentId",
+          "runtimeWorkspaceRoots"
+        ],
         "type": "object"
       },
       "ThreadExtra": {
@@ -21965,6 +22042,16 @@
           },
           "modelProviders": {
             "description": "Optional provider filter; when set, only sessions recorded under these providers are returned. When present but empty, includes all providers.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "originators": {
+            "description": "Optional originator allowlist, matching any supplied value exactly. Supported by hosted backends only; the local app-server rejects a nonempty list. Omitted or empty lists leave originators unrestricted.",
             "items": {
               "type": "string"
             },

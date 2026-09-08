@@ -935,7 +935,7 @@ async fn plan_implementation_popup_skips_when_messages_queued() {
 
     chat.on_task_complete(
         Some("Plan details".to_string()),
-        /*duration_ms*/ None,
+        /*completion*/ None,
         /*from_replay*/ false,
     );
 
@@ -963,7 +963,7 @@ async fn plan_implementation_popup_skips_without_proposed_plan() {
         }],
     });
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*duration_ms*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -985,7 +985,7 @@ async fn plan_implementation_popup_shows_after_proposed_plan_output() {
     chat.on_plan_delta("- Step 1\n- Step 2\n".to_string());
     chat.on_plan_item_completed("- Step 1\n- Step 2\n".to_string());
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*duration_ms*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -1028,7 +1028,7 @@ async fn plan_implementation_popup_skips_when_steer_follows_proposed_plan() {
 
     complete_user_message(&mut chat, "user-1", "Please continue.");
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*duration_ms*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -1075,7 +1075,7 @@ async fn plan_implementation_popup_shows_after_new_plan_follows_steer() {
         .to_string(),
     );
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*duration_ms*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -1104,7 +1104,7 @@ async fn plan_implementation_popup_skips_when_rate_limit_prompt_pending() {
     });
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 92.0)));
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*duration_ms*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -1483,7 +1483,7 @@ async fn plan_slash_command_with_hidden_shell_paste_rejected_image_remains_liter
         .expect("current model")
         .input_modalities
         .retain(|modality| *modality != InputModality::Image);
-    chat.model_catalog = Arc::new(ModelCatalog::new(models));
+    Arc::make_mut(&mut chat.model_catalog).models = models;
     let payload = paste_hidden_plan_shell_payload(&mut chat);
     chat.set_remote_image_urls(vec!["https://example.com/image.png".to_string()]);
 
@@ -1558,7 +1558,7 @@ async fn rejected_initial_image_does_not_submit_later_queued_prompt() {
         .expect("current model")
         .input_modalities
         .retain(|modality| *modality != InputModality::Image);
-    chat.model_catalog = Arc::new(ModelCatalog::new(models));
+    Arc::make_mut(&mut chat.model_catalog).models = models;
     let mut initial_message = UserMessage::from("initial prompt");
     initial_message.remote_image_urls = vec!["https://example.com/image.png".to_string()];
     chat.initial_user_message = Some(initial_message);
@@ -1644,7 +1644,6 @@ async fn make_startup_chat_with_cli_overrides(
         feedback: codex_feedback::CodexFeedback::new(),
         is_first_run: true,
         status_account_display: None,
-        runtime_model_provider_base_url: None,
         initial_plan_type: None,
         model: Some(resolved_model),
         startup_tooltip_override: None,
