@@ -75,7 +75,10 @@ fn post_sampling_token_estimate_is_disabled_by_always_on_sinks() {
         "log_db sink retained the estimate event: {captured_text}"
     );
     let feedback_text = String::from_utf8(
-        feedback.snapshot(/*session_id*/ None).log_attachment(None).buffer,
+        feedback
+            .snapshot(/*session_id*/ None)
+            .log_attachment(None)
+            .buffer,
     )
     .expect("valid utf-8 feedback logs");
     assert!(
@@ -179,17 +182,73 @@ fn forced_continuation_triggers_for_short_narration_only_stop() {
 }
 
 #[test]
-fn forced_continuation_refuses_long_narration_and_explicit_questions() {
+fn forced_continuation_triggers_for_long_narration_declaring_remaining_work() {
+    // The observed premature stop from an ongoing session: a multi-sentence
+    // narration :=>says what still needs doing, then ends without any tool call.
+    let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
+    let narration = "The controller still calls the renamed method without the new parameter. \
+        I need to restore the old method as a public wrapper and check what the identity block \
+        method outputs now, then run the relevant specs before continuing."
+        .to_string();
+    assert!(
+        narration.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS,
+        "this narration must exercise the long-narration path"
+    );
+    assert!(should_force_narration_continuation(
+        &budget,
+        /*chat_completions_wire*/ true,
+        &Some(narration),
+        /*plan_mode*/ false,
+        /*tool_calls_made*/ false,
+    ));
+    assert_eq!(
+        budget.load(Ordering::Relaxed),
+        MAX_FORCED_CONTINUATIONS_PER_TURN - 1
+    );
+}
+
+#[test]
+fn forced_continuation_refuses_long_ambiguous_or_completed_narration_and_questions() {
     let budget = AtomicU32::new(MAX_FORCED_CONTINUATIONS_PER_TURN);
     let expected = budget.load(Ordering::Relaxed);
 
-    let long_narration = Some("a".repeat(NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS + 1));
+    let ambiguous_long = Some("a".repeat(NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS + 1));
     assert!(!should_force_narration_continuation(
         &budget,
         true,
-        &long_narration,
+        &ambiguous_long,
         false,
         false,
+    ));
+
+    let completed = Some(
+        "The migration is complete and the full suite is green; nothing else remains. \
+        There is no outstanding work left to do here. The controller was verified end to \
+        end, all pages render in both color modes, and no further changes are planned."
+            .to_string(),
+    );
+    assert!(
+        completed.as_ref().expect("present").chars().count()
+            > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
+    );
+    assert!(!should_force_narration_continuation(
+        &budget, true, &completed, false, false,
+    ));
+
+    // Long "let me know"-style closings read as completions, not remaining work
+    // (they must exercise the long-narration path for the guard to matter).
+    let closing = Some(
+        "All pages were verified across both color modes and every viewport, the media \
+        picker, revision history, and navigation items all behave as expected, and the \
+        full regression suite is green. Let me know if you want any adjustments to the layout."
+            .to_string(),
+    );
+    assert!(
+        closing.as_ref().expect("present").chars().count()
+            > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
+    );
+    assert!(!should_force_narration_continuation(
+        &budget, true, &closing, false, false,
     ));
 
     let question = Some("This deletes the staging database. Should I proceed?".to_string());

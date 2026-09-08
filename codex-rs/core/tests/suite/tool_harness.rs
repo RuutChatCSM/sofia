@@ -277,9 +277,18 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
     let server = start_mock_server().await;
     let request_count = Arc::new(AtomicUsize::new(0));
     let response_count = Arc::clone(&request_count);
-    // Four short narration-only stops. The first three are force-continued
-    // (bounded budget of 3 per turn); the fourth exhausts the budget and the
-    // turn ends instead of re-prompting forever.
+    // Four long narration-only stops that explicitly declare remaining work (the
+    // observed premature-stop pattern: multi-sentence narration that promises
+    // actions and then ends without a tool call). The first three are
+    // force-continued (bounded budget of 3 per turn); the fourth exhausts the
+    // budget and the turn ends instead of re-prompting forever.
+    let narration = "The controller still calls the renamed method without the new parameter. \
+        I need to restore the old method as a public wrapper and check what the identity block \
+        method outputs now, then run the relevant specs before continuing.";
+    assert!(
+        narration.chars().count() > 200,
+        "exercise the long-narration path"
+    );
     let narration_responses: Vec<String> = (0..4)
         .map(|_| {
             format!(
@@ -288,7 +297,7 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
                     "id": "chatcmpl-narration",
                     "choices": [{
                         "index": 0,
-                        "delta": { "content": "I’ll review the implementation now." },
+                        "delta": { "content": narration },
                         "finish_reason": "stop",
                     }],
                 })

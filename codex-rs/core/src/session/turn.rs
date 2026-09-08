@@ -154,9 +154,10 @@ pub(crate) struct McpStartupRequirements {
 /// the request loop; each forced continuation costs a fresh sampling request.
 const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 3;
 
-/// Narration shorter than this (characters) in a chat-completions turn that made
-/// no tool calls is treated as a suspected premature stop rather than a final
-/// answer. Final answers under reporting are typically longer or structured.
+/// Narration at or below this many characters (in a chat-completions turn that
+/// made no tool calls) is treated as a suspected premature stop regardless of
+/// its phrasing. Longer narration only triggers a forced continuation when it
+/// explicitly declares still-remaining work (see `declares_remaining_work`).
 const NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS: usize = 200;
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
@@ -2286,13 +2287,18 @@ fn assign_missing_streamed_response_item_id(
     Session::assign_missing_response_item_id(item);
 }
 
-/// Returns true when a chat-completions model ended its response with a short
-/// narration and no tool call — the signature of a premature stop where the
-/// model narrated the next step but forgot to request its tool. Re-sampling
-/// then nudges the model to pick the work back up, up to a bounded budget per
-/// turn (`MAX_FORCED_CONTINUATIONS_PER_TURN`). Never fires for Responses-wire
+/// Returns true when a chat-completions model ended its response with narration
+/// and no tool call — the signature of a premature stop where the model narrated
+/// the next step but forgot to request its tool. Re-sampling then nudges the
+/// model to pick the work back up, up to a bounded budget per turn
+/// (`MAX_FORCED_CONTINUATIONS_PER_TURN`). Never fires for Responses-wire
 /// providers (their `end_turn` is authoritative), plan mode, responses that
-/// already made tool calls, or responses that ask the user a question.
+/// already made tool calls, or responses that hand control back to the user with
+/// a question.
+///
+/// Short narration is suspicious on its own. Long narration is only suspicious
+/// when it declares further work that the model then never performs (e.g. "I
+/// need to restore the method... Let me also check what the block outputs now").
 fn should_force_narration_continuation(
     narration_continuation_budget: &AtomicU32,
     chat_completions_wire: bool,
@@ -2306,11 +2312,11 @@ fn should_force_narration_continuation(
     let Some(message) = last_agent_message.as_deref() else {
         return false;
     };
-    let asks_user = matches!(
-        message.trim_end().chars().next_back(),
-        Some('?') | Some('？')
-    );
-    if asks_user || message.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS {
+    if ends_by_asking_user(message) {
+        return false;
+    }
+    let short = message.chars().count() <= NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS;
+    if !short && !declares_remaining_work(message) {
         return false;
     }
     narration_continuation_budget
@@ -2318,6 +2324,58 @@ fn should_force_narration_continuation(
             remaining.checked_sub(1)
         })
         .is_ok()
+}
+
+/// Chat-completions replies that end with a question hand control back to the
+/// user, so they must never be force-continued.
+fn ends_by_asking_user(message: &str) -> bool {
+    matches!(
+        message.trim_end().chars().next_back(),
+        Some('?') | Some('？')
+    )
+}
+
+/// Cheap, model-free detection that a narration-only reply announces further
+/// work instead of reporting an outcome. This is the failure mode behind
+/// premature stops for chat-completions models: a multi-sentence narration that
+/// promises actions ("I need to ...", "Let me also check ...") and then ends
+/// without calling any tool. Only explicit forward-looking markers count, so a
+/// long final answer that merely describes what was already done is not matched.
+/// "let me know" closings are treated as completions, not remaining work.
+fn declares_remaining_work(message: &str) -> bool {
+    const FORWARD_MARKERS: [&str; 24] = [
+        "i need to",
+        "i need ",
+        "i'll ",
+        "i will ",
+        "i'm going to",
+        "i am going to",
+        "i'm about to",
+        "i would like to",
+        "i want to",
+        "let me",
+        "have to ",
+        "need to ",
+        "want to ",
+        "going to ",
+        "have yet to",
+        "haven't",
+        "not yet",
+        "still need",
+        "still have",
+        "start by",
+        "first i",
+        "next i",
+        "then i",
+        "before i",
+    ];
+    let message = message.to_lowercase();
+    if message.contains("let me know") {
+        return false;
+    }
+    FORWARD_MARKERS
+        .iter()
+        .any(|marker| message.contains(marker))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2754,10 +2812,17 @@ async fn try_run_sampling_request(
                         narration_chars = last_agent_message
                             .as_ref()
                             .map(|message| message.chars().count()),
+                        short_narration = last_agent_message.as_ref().is_some_and(|message| {
+                            message.chars().count() <= NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS
+                        }),
+                        declares_remaining_work = last_agent_message
+                            .as_ref()
+                            .is_some_and(|message| declares_remaining_work(message)),
                         budget_remaining =
                             sess.narration_continuation_budget.load(Ordering::Relaxed),
-                        "force-continuing precedence-stop: chat-completions reply was short \
-                         narration with no tool call"
+                        "force-continuing precedence-stop: chat-completions reply was narration \
+                         with no tool call that has not asked the user and does not report a \
+                         completed outcome"
                     );
                     needs_follow_up = true;
                 }
