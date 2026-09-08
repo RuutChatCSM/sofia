@@ -42,21 +42,73 @@ fn assistant_output_text(text: &str) -> ResponseItem {
 
 #[test]
 fn post_sampling_token_estimate_is_disabled_by_always_on_sinks() {
+    // `tracing::event_enabled!` consults a process-global interest cache whose
+    // entries parallel tests recompute from their own subscribers, so asserting
+    // on it is racy. Emitting through the real always-on sinks and checking their
+    // output is deterministic: each layer's own `Targets` filter is still
+    // consulted per event even when the global cache short-circuits the interest
+    // check, so neither sink can retain the estimate event.
     let feedback = codex_feedback::CodexFeedback::new();
+    let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let writer = CaptureWriter(Arc::clone(&captured));
     let subscriber = tracing_subscriber::registry()
-        .with(feedback.logger_layer())
-        .with(tracing_subscriber::fmt::layer().with_filter(codex_state::log_db::default_filter()));
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(writer)
+                .with_filter(codex_state::log_db::default_filter()),
+        )
+        .with(feedback.logger_layer());
 
     tracing::subscriber::with_default(subscriber, || {
-        tracing::callsite::rebuild_interest_cache();
-        assert!(!tracing::event_enabled!(
+        tracing::trace!(
             target: POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
-            tracing::Level::TRACE,
-            turn_id,
-            estimated_token_count,
-            message
-        ));
+            turn_id = "turn-1",
+            estimated_token_count = 1u64,
+            "post sampling token estimate"
+        );
     });
+
+    let captured_text = String::from_utf8(captured.lock().expect("capture mutex poisoned").clone())
+        .expect("valid utf-8 captured logs");
+    assert!(
+        !captured_text.contains("post sampling token estimate"),
+        "log_db sink retained the estimate event: {captured_text}"
+    );
+    let feedback_text = String::from_utf8(
+        feedback.snapshot(/*session_id*/ None).log_attachment(None).buffer,
+    )
+    .expect("valid utf-8 feedback logs");
+    assert!(
+        !feedback_text.contains("post sampling token estimate"),
+        "feedback sink retained the estimate event: {feedback_text}"
+    );
+}
+
+#[derive(Clone, Default)]
+struct CaptureWriter(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CaptureWriter {
+    type Writer = CaptureWriterGuard;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        CaptureWriterGuard(Arc::clone(&self.0))
+    }
+}
+
+struct CaptureWriterGuard(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for CaptureWriterGuard {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("capture mutex poisoned")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 #[tokio::test]
