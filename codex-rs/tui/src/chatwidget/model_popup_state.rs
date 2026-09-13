@@ -41,6 +41,13 @@ impl ChatWidget {
             .lock()
             .unwrap()
             .clone_from(&presets);
+        // The refresh reply only carries the active provider's engine models;
+        // re-apply the configured-provider catalog so other connected providers
+        // (and models.dev-only models like DeepSeek V4.1) stay in the picker.
+        self.model_catalog.add_connected_provider_models(
+            &self.config.model_provider_id,
+            &self.config.codex_home,
+        );
         self.refresh_effective_service_tier();
         self.refresh_model_dependent_surfaces();
         true

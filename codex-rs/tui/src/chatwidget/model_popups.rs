@@ -230,8 +230,10 @@ impl ChatWidget {
         let current_model = self.current_model();
 
         // Group models by provider so each section reads as a labeled group.
-        // Fall back to a Built-in label for unprefixed (OpenAI) models so the
-        // picker always shows section headers instead of a flat, cramped list.
+        // Unprefixed models belong to the active provider (its engine-reported
+        // models have no prefix), so group them under the provider name rather
+        // than a generic "Built-in" label.
+        let active_provider_name = self.config_ref().model_provider.name.clone();
         let mut grouped: std::collections::BTreeMap<String, Vec<ModelPreset>> =
             std::collections::BTreeMap::new();
         for preset in presets {
@@ -245,7 +247,7 @@ impl ChatWidget {
                 grouped.entry(provider).or_default().push(preset);
             } else {
                 grouped
-                    .entry("Built-in".to_string())
+                    .entry(active_provider_name.clone())
                     .or_default()
                     .push(preset);
             }
@@ -319,6 +321,24 @@ impl ChatWidget {
         });
     }
 
+    /// If `model` is a namespaced `provider/model` slug for a configured
+    /// provider other than the active one, return `(provider_id, model_id)` so
+    /// selecting it can switch providers (models.dev-style cross-provider pick).
+    fn connected_provider_target(&self, model: &str) -> Option<(String, String)> {
+        let (provider_id, model_id) = model.split_once('/')?;
+        if provider_id.is_empty() || model_id.is_empty() {
+            return None;
+        }
+        if provider_id == self.config_ref().model_provider_id {
+            return None;
+        }
+        let config = crate::chatwidget::connect_provider_popup::load_providers_config();
+        config
+            .providers
+            .contains_key(provider_id)
+            .then(|| (provider_id.to_string(), model_id.to_string()))
+    }
+
     fn model_selection_actions(
         &self,
         model_for_action: String,
@@ -329,8 +349,22 @@ impl ChatWidget {
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
         let thread_id = self.thread_id();
+        let provider_target = self.connected_provider_target(&model_for_action);
         vec![Box::new(move |tx| {
-            if model_for_action == LUNA_RESERVE_MODEL {
+            if let Some((provider_id, model_id)) = provider_target.clone() {
+                // Selecting a model that belongs to a different connected
+                // provider switches the whole session to that provider.
+                let effort = effort_for_action
+                    .as_ref()
+                    .map(ReasoningEffortConfig::as_str)
+                    .unwrap_or("medium")
+                    .to_string();
+                tx.send(AppEvent::FinalizeProviderSetup {
+                    provider_id,
+                    model_id,
+                    effort,
+                });
+            } else if model_for_action == LUNA_RESERVE_MODEL {
                 // Reserve is temporary: update the active task without persisting a model default.
                 if let Some(thread_id) = thread_id {
                     tx.send(AppEvent::UpdateLunaReserveReasoning {
@@ -533,6 +567,12 @@ impl ChatWidget {
             .partition(|effort| !Self::is_advanced_reasoning_effort(effort));
 
         if choices.len() == 1 && advanced_choices.is_empty() {
+            // No reasoning submenu is shown, so dismiss the parent model picker
+            // explicitly — otherwise selecting appears to do nothing and the
+            // picker stays open.
+            self.bottom_pane.dismiss_view_by_id(MODEL_SELECTION_VIEW_ID);
+            self.bottom_pane
+                .dismiss_view_by_id(ALL_MODELS_SELECTION_VIEW_ID);
             let selected_effort = choices.first().cloned();
             let selected_model = preset.model;
             if self

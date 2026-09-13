@@ -308,6 +308,10 @@ impl App {
             ModelCatalog::new(available_models.clone())
                 .with_collaboration_modes(bootstrap.collaboration_modes),
         );
+        model_catalog.add_connected_provider_models(
+            &config.model_provider_id,
+            &config.codex_home,
+        );
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
         let has_chatgpt_account = bootstrap.has_chatgpt_account;

@@ -236,7 +236,7 @@ async fn compact_uses_bearer_after_agent_identity_session_fallback() -> anyhow::
 }
 
 fn test_model_provider() -> SharedModelProvider {
-    test_model_client(SessionSource::Cli).state.provider.clone()
+    test_model_client(SessionSource::Cli).state.provider()
 }
 
 fn test_responses_metadata_for_client(
@@ -1245,9 +1245,11 @@ fn guardian_reviewer_uses_dedicated_endpoint_only_with_codex_backend_auth() {
         ResponsesEndpoint::Responses
     );
 
-    Arc::get_mut(&mut model_client.state)
+    *Arc::get_mut(&mut model_client.state)
         .expect("test client should have unique session state")
-        .provider = create_model_provider(
+        .provider
+        .write()
+        .expect("provider lock poisoned") = create_model_provider(
         ModelProviderInfo::create_openai_provider(Some("https://proxy.example.com/v1".to_owned())),
         Some(AuthManager::from_auth_for_testing(
             CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -1408,8 +1410,9 @@ fn chat_completions_body_reconstructs_assistant_tool_calls_before_tool_outputs()
     .unwrap();
     let messages = body["messages"].as_array().unwrap();
 
-    // 0: system, 1: user, 2: assistant with tool_calls, 3: tool result, 4: assistant final.
-    assert_eq!(messages.len(), 5);
+    // 0: system, 1: user, 2: assistant with tool_calls, 3: tool result, 4: assistant final,
+    // 5: user "Continue." (ensureTrailingUserMessage).
+    assert_eq!(messages.len(), 6);
     assert_eq!(messages[0]["role"], "system");
     assert_eq!(messages[1]["role"], "user");
     assert_eq!(messages[2]["role"], "assistant");
@@ -1421,6 +1424,199 @@ fn chat_completions_body_reconstructs_assistant_tool_calls_before_tool_outputs()
     assert_eq!(messages[3]["tool_call_id"], "call_1");
     assert_eq!(messages[4]["role"], "assistant");
     assert_eq!(messages[4]["content"], "Finished");
+    assert_eq!(messages[5]["role"], "user");
+    assert_eq!(messages[5]["content"], "Continue.");
+}
+
+#[test]
+fn chat_completions_body_maps_developer_role_to_system() {
+    use crate::client::build_chat_completions_body;
+
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "developer".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "be concise".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "hi".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+
+    // The Responses-only `developer` role is folded into `system`; DeepSeek and
+    // other Chat Completions providers reject `developer` with a 400.
+    assert_eq!(messages[0]["role"], "system"); // base instructions
+    assert_eq!(messages[1]["role"], "system");
+    assert_eq!(messages[1]["content"], "be concise");
+    assert_eq!(messages[2]["role"], "user");
+    assert!(
+        messages.iter().all(|message| message["role"] != "developer"),
+        "no message may carry the developer role"
+    );
+}
+
+#[test]
+fn chat_completions_body_carries_reasoning_content_on_tool_call_message() {
+    use crate::client::build_chat_completions_body;
+    use codex_protocol::ResponseItemId;
+    use codex_protocol::models::FunctionCallOutputPayload;
+    use codex_protocol::models::ReasoningItemContent;
+
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "go".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::Reasoning {
+                id: Some(ResponseItemId::new("r1")),
+                summary: vec![],
+                content: Some(vec![ReasoningItemContent::ReasoningText {
+                    text: "I should list the files".to_string(),
+                }]),
+                encrypted_content: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCall {
+                id: Some(ResponseItemId::new("fc1")),
+                name: "shell".to_string(),
+                namespace: None,
+                arguments: r#"{"cmd":"ls"}"#.to_string(),
+                encrypted_function_args: None,
+                call_id: "call_1".to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            // DeepSeek returns the assistant text in the same thinking turn as the
+            // tool call; both messages must echo reasoning_content.
+            ResponseItem::Message {
+                id: None,
+                role: "assistant".to_string(),
+                content: vec![ContentItem::OutputText {
+                    text: "Listing the files now".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: Some(ResponseItemId::new("fco1")),
+                call_id: Some("call_1".to_string()),
+                name: Some("shell".to_string()),
+                namespace: None,
+                output: FunctionCallOutputPayload::from_text("done".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+
+    // system, user, assistant(text), assistant(tool_calls), tool. DeepSeek
+    // thinking mode requires the assistant message(s) of the turn to echo
+    // `reasoning_content`.
+    assert_eq!(messages[2]["role"], "assistant");
+    assert_eq!(messages[2]["content"], "Listing the files now");
+    assert_eq!(
+        messages[2]["reasoning_content"],
+        "I should list the files",
+        "reasoning_content must be passed back on the assistant text message"
+    );
+    assert_eq!(messages[3]["role"], "assistant");
+    assert_eq!(messages[3]["tool_calls"][0]["id"], "call_1");
+    assert_eq!(
+        messages[3]["reasoning_content"],
+        "I should list the files",
+        "reasoning_content must be passed back on the tool-call message"
+    );
+    assert_eq!(messages[4]["role"], "tool");
+}
+
+#[test]
+fn chat_completions_body_sets_reasoning_content_even_when_empty() {
+    use crate::client::build_chat_completions_body;
+    use codex_protocol::ResponseItemId;
+    use codex_protocol::models::FunctionCallOutputPayload;
+
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "go".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            // DeepSeek can return empty reasoning_content that still must be
+            // echoed back (mimocode sets the field unconditionally).
+            ResponseItem::Reasoning {
+                id: Some(ResponseItemId::new("r1")),
+                summary: vec![],
+                content: Some(vec![]),
+                encrypted_content: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCall {
+                id: Some(ResponseItemId::new("fc1")),
+                name: "shell".to_string(),
+                namespace: None,
+                arguments: r#"{"cmd":"ls"}"#.to_string(),
+                encrypted_function_args: None,
+                call_id: "call_1".to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: Some(ResponseItemId::new("fco1")),
+                call_id: Some("call_1".to_string()),
+                name: Some("shell".to_string()),
+                namespace: None,
+                output: FunctionCallOutputPayload::from_text("done".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+
+    assert_eq!(messages[2]["role"], "assistant");
+    assert_eq!(
+        messages[2]["reasoning_content"], "",
+        "reasoning_content must be present even when empty"
+    );
 }
 
 #[test]

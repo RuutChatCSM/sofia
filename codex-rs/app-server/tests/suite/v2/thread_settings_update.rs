@@ -40,6 +40,40 @@ use tokio::time::timeout;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test]
+async fn thread_settings_update_switches_provider_for_next_turn() -> Result<()> {
+    let original = create_mock_responses_server_sequence_unchecked(vec![
+        create_final_assistant_message_sse_response("wrong provider")?,
+    ]).await;
+    let selected = create_mock_responses_server_sequence_unchecked(vec![
+        create_final_assistant_message_sse_response("selected provider")?,
+    ]).await;
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &original.uri())?;
+    let config_path = codex_home.path().join("config.toml");
+    let mut config = std::fs::read_to_string(&config_path)?;
+    config.push_str(&format!(
+        "\n[model_providers.selected]\nname = \"Selected\"\nbase_url = {:?}\nwire_api = \"responses\"\nsupports_websockets = false\n",
+        selected.uri()
+    ));
+    std::fs::write(config_path, config)?;
+    write_models_cache(codex_home.path())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT).await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    send_thread_settings_update(&mut mcp, ThreadSettingsUpdateParams {
+        thread_id: thread.id.clone(),
+        model_provider: Some("selected".to_string()),
+        ..Default::default()
+    }).await?;
+    start_text_turn(&mut mcp, thread.id).await?;
+    timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_notification_message("turn/completed")).await??;
+    assert!(received_response_bodies(&original).await?.is_empty());
+    assert!(!received_response_bodies(&selected).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_settings_update_emits_notification_and_updates_future_turns() -> Result<()> {
     let server = create_mock_responses_server_sequence_unchecked(vec![
         create_final_assistant_message_sse_response("done")?,

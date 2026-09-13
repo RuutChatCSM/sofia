@@ -911,6 +911,27 @@ impl TurnRequestProcessor {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
         self.ensure_direct_input_allowed(request_id, thread.as_ref())
             .await?;
+        // Provider selection is part of the public settings contract, not just
+        // picker metadata. Resolve the latest provider config before accepting it.
+        let provider_config = if let Some(provider) = params.model_provider.clone() {
+            let snapshot = thread.config_snapshot().await;
+            Some(
+                self.config_manager
+                    .load_for_cwd(
+                        None,
+                        ConfigOverrides {
+                            model_provider: Some(provider),
+                            model: params.model.clone(),
+                            ..Default::default()
+                        },
+                        Some(snapshot.cwd().to_path_buf()),
+                    )
+                    .await
+                    .map_err(|err| config_load_error(&err))?,
+            )
+        } else {
+            None
+        };
         let cwd = resolve_request_cwd(params.cwd)?;
         let environments = self
             .build_environment_override(
@@ -950,6 +971,9 @@ impl TurnRequestProcessor {
             .map_err(|err| internal_error(format!("failed to update thread settings: {err}")))?;
         }
 
+        if let Some(config) = provider_config {
+            Box::pin(thread.refresh_runtime_config(config)).await;
+        }
         Ok(ThreadSettingsUpdateResponse {})
     }
 

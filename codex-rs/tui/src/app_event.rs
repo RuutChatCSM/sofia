@@ -573,7 +573,7 @@ pub(crate) enum AppEvent {
     ModelsFetched {
         provider_id: String,
         provider_name: String,
-        result: Result<Vec<String>, String>,
+        result: Result<Vec<crate::chatwidget::connect_provider_popup::ProviderModel>, String>,
     },
 
     /// Request to exit the application due to a fatal error.

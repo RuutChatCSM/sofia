@@ -657,11 +657,8 @@ fn local_picker_cwd_filter(
 }
 
 fn picker_provider_filter(config: &Config, uses_remote_workspace: bool) -> ProviderFilter {
-    if uses_remote_workspace {
-        ProviderFilter::Any
-    } else {
-        ProviderFilter::MatchDefault(config.model_provider_id.to_string())
-    }
+    let _ = (config, uses_remote_workspace);
+    ProviderFilter::Any
 }
 
 fn picker_runtime_keymap(config: &crate::local_settings::LocalSettings) -> Result<RuntimeKeymap> {

@@ -1898,11 +1898,10 @@ fn resume_lookup_model_providers(
     config: &Config,
     args: &crate::cli::ResumeArgs,
 ) -> Option<Vec<String>> {
-    if args.last {
-        Some(vec![config.model_provider_id.clone()])
-    } else {
-        None
-    }
+    let _ = (config, args);
+    // Do not scope resume lookups by provider: a session created under one
+    // provider must still be resumable after the active provider changes.
+    None
 }
 
 fn canceled_mcp_server_elicitation_response() -> Result<Value, String> {

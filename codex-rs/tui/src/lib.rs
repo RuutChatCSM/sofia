@@ -719,8 +719,7 @@ async fn lookup_session_target_with_app_server(
         };
     }
 
-    let model_provider =
-        (!app_server.uses_remote_workspace()).then_some(config.model_provider_id.as_str());
+    let model_provider: Option<&str> = None;
     Ok(named_session_lookup::lookup(
         app_server,
         config.codex_home.as_path(),
@@ -788,11 +787,7 @@ fn latest_session_lookup_params(
         limit: Some(1),
         sort_key: Some(AppServerThreadSortKey::UpdatedAt),
         sort_direction: None,
-        model_providers: if uses_remote_workspace {
-            None
-        } else {
-            Some(vec![config.model_provider_id.clone()])
-        },
+        model_providers: None,
         source_kinds: Some(resume_source_kinds(include_non_interactive)),
         archived: Some(false),
         section_id: None,
@@ -2984,7 +2979,7 @@ requires_openai_auth = {requires_openai_auth}
     }
 
     #[tokio::test]
-    async fn latest_session_lookup_params_keep_local_filters_for_embedded_sessions()
+    async fn latest_session_lookup_params_ignore_provider_for_embedded_sessions()
     -> std::io::Result<()> {
         let temp_dir = TempDir::new()?;
         let config = build_config(&temp_dir).await?;
@@ -3001,7 +2996,8 @@ requires_openai_auth = {requires_openai_auth}
 
         assert_eq!(
             params.model_providers,
-            Some(vec![config.model_provider_id.clone()])
+            None,
+            "session lookup must not be scoped to the active provider"
         );
         assert_eq!(
             params.cwd,
@@ -3022,7 +3018,7 @@ requires_openai_auth = {requires_openai_auth}
     }
 
     #[tokio::test]
-    async fn latest_session_lookup_params_keep_local_filters_for_local_daemon_sessions()
+    async fn latest_session_lookup_params_ignore_provider_for_local_daemon_sessions()
     -> color_eyre::Result<()> {
         let temp_dir = TempDir::new()?;
         let config = build_config(&temp_dir).await?;
@@ -3042,7 +3038,7 @@ requires_openai_auth = {requires_openai_auth}
             LatestSessionLookupMode::StateDbOnly,
         );
 
-        assert_eq!(params.model_providers, Some(vec![config.model_provider_id]));
+        assert_eq!(params.model_providers, None);
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(cwd.to_string_lossy().to_string()))

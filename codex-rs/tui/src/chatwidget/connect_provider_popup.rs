@@ -22,6 +22,23 @@ pub(crate) struct ProviderEntry {
     pub name: String,
     pub base_url: String,
     pub wire_api: String,
+    /// Models advertised by the models.dev catalog for this provider. Used to
+    /// supplement (and name) the models returned by the provider's live
+    /// `/models` endpoint, which is often stale or omits newer releases.
+    pub models: Vec<ProviderModel>,
+}
+
+/// A single model advertised in the models.dev catalog.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ProviderModel {
+    /// The provider-facing model id (what goes on the wire / into config.toml).
+    pub id: String,
+    /// Human-friendly display name from the catalog, falling back to the id.
+    pub name: String,
+    /// Whether the model supports a reasoning-effort control (models.dev
+    /// `reasoning`). Drives the effort picker for catalog-only models.
+    #[serde(default)]
+    pub reasoning: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +56,11 @@ pub(crate) struct ProviderConfig {
     pub base_url: String,
     pub wire_api: String,
     pub name: String,
+    /// Model catalog discovered for this provider (models.dev merged with the
+    /// live `/models` endpoint). Persisted so the picker and default-model
+    /// resolution keep working offline and across restarts.
+    #[serde(default)]
+    pub models: Vec<ProviderModel>,
 }
 
 fn providers_config_path() -> String {
@@ -48,9 +70,23 @@ fn providers_config_path() -> String {
     )
 }
 
+/// Providers config path under an explicit home (used by callers that must not
+/// depend on the process-global `CODEX_HOME`, such as the model catalog).
+pub(crate) fn providers_config_path_in(codex_home: &std::path::Path) -> std::path::PathBuf {
+    codex_home.join("providers.json")
+}
+
 pub(crate) fn load_providers_config() -> ProvidersConfig {
     let path = providers_config_path();
     std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// Load `providers.json` from an explicit codex home.
+pub(crate) fn load_providers_config_in(codex_home: &std::path::Path) -> ProvidersConfig {
+    std::fs::read_to_string(providers_config_path_in(codex_home))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
@@ -65,6 +101,17 @@ pub(crate) fn save_providers_config(config: &ProvidersConfig) -> Result<(), Stri
     let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Persist the discovered model catalog for a provider into `providers.json`.
+/// No-op when the provider is not configured yet.
+pub(crate) fn save_provider_models(provider_id: &str, models: &[ProviderModel]) {
+    let mut config = load_providers_config();
+    let Some(entry) = config.providers.get_mut(provider_id) else {
+        return;
+    };
+    entry.models = models.to_vec();
+    let _ = save_providers_config(&config);
 }
 
 /// Path to the engine's credential store (`sofia-auth.json`), which is the file
@@ -98,6 +145,27 @@ pub(crate) fn save_auth_key(key_name: &str, api_key: &str) -> Result<(), String>
     let json = serde_json::to_string_pretty(&auth).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Load every provider's catalog models from the on-disk models.dev cache,
+/// without ever fetching. Empty when the cache is missing or unreadable.
+pub(crate) fn cached_catalog_models(
+    codex_home: &std::path::Path,
+) -> std::collections::HashMap<String, Vec<ProviderModel>> {
+    let cache_path = codex_home.join("models_dev_cache.json");
+    let Ok(text) = std::fs::read_to_string(&cache_path) else {
+        return std::collections::HashMap::new();
+    };
+    let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return std::collections::HashMap::new();
+    };
+    let Some(providers) = data.as_object() else {
+        return std::collections::HashMap::new();
+    };
+    providers
+        .iter()
+        .map(|(id, provider)| (id.clone(), parse_provider_models(provider)))
+        .collect()
 }
 
 /// Build the updated `config.toml` content that selects `provider_id`/`model_id`/
@@ -231,6 +299,7 @@ fn parse_models_dev_catalog(json: &str) -> Option<Vec<ProviderEntry>> {
                 name,
                 base_url: api.to_string(),
                 wire_api: "chat_completions".to_string(),
+                models: parse_provider_models(val),
             })
         })
         .collect();
@@ -239,6 +308,33 @@ fn parse_models_dev_catalog(json: &str) -> Option<Vec<ProviderEntry>> {
     }
     providers.sort_by(|a, b| a.name.cmp(&b.name));
     Some(providers)
+}
+
+/// Extract the models map from a single models.dev provider object:
+/// `"models": { "<id>": { "name": "...", ... } }`.
+fn parse_provider_models(provider: &serde_json::Value) -> Vec<ProviderModel> {
+    provider
+        .get("models")
+        .and_then(|value| value.as_object())
+        .map(|models| {
+            models
+                .iter()
+                .map(|(id, model)| ProviderModel {
+                    id: id.clone(),
+                    name: model
+                        .get("name")
+                        .and_then(|name| name.as_str())
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or(id)
+                        .to_string(),
+                    reasoning: model
+                        .get("reasoning")
+                        .and_then(|reasoning| reasoning.as_bool())
+                        .unwrap_or(false),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Fetch the models.dev catalog JSON.
@@ -264,78 +360,91 @@ fn well_known_providers() -> Vec<ProviderEntry> {
             name: "Xiaomi (MiMo)".into(),
             base_url: "https://api.xiaomimimo.com/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "anthropic".into(),
             name: "Anthropic".into(),
             base_url: "https://api.anthropic.com/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "openrouter".into(),
             name: "OpenRouter".into(),
             base_url: "https://openrouter.ai/api/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "groq".into(),
             name: "Groq".into(),
             base_url: "https://api.groq.com/openai/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "deepseek".into(),
             name: "DeepSeek".into(),
             base_url: "https://api.deepseek.com/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "mistral".into(),
             name: "Mistral AI".into(),
             base_url: "https://api.mistral.ai/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "together".into(),
             name: "Together AI".into(),
             base_url: "https://api.together.xyz/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "xai".into(),
             name: "xAI (Grok)".into(),
             base_url: "https://api.x.ai/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "google".into(),
             name: "Google Gemini".into(),
             base_url: "https://generativelanguage.googleapis.com/v1beta".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "fireworks".into(),
             name: "Fireworks AI".into(),
             base_url: "https://api.fireworks.ai/inference/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "cerebras".into(),
             name: "Cerebras".into(),
             base_url: "https://api.cerebras.ai/v1".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "perplexity".into(),
             name: "Perplexity".into(),
             base_url: "https://api.perplexity.ai".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
         ProviderEntry {
             id: "cohere".into(),
             name: "Cohere".into(),
             base_url: "https://api.cohere.com/v2".into(),
             wire_api: "chat_completions".into(),
+            models: Vec::new(),
         },
     ]
 }
@@ -445,7 +554,17 @@ impl ChatWidget {
         };
         let tx = self.app_event_tx.clone();
         tokio::task::spawn_blocking(move || {
-            let result = fetch_models(&provider_config.base_url, &provider_config.api_key);
+            // The provider's own `/models` endpoint is authoritative for what it
+            // currently serves, but it is frequently stale or omits newer
+            // releases. Merge in the models.dev catalog so newer models (for
+            // example DeepSeek V4.1 Flash) stay selectable, and fall back to the
+            // catalog entirely when the endpoint is unavailable.
+            let catalog = catalog_models_for_provider(&provider_id);
+            let result = match fetch_models(&provider_config.base_url, &provider_config.api_key) {
+                Ok(live_models) => Ok(merge_provider_models(catalog, live_models)),
+                Err(_) if !catalog.is_empty() => Ok(catalog),
+                Err(err) => Err(err),
+            };
             let _ = tx.send(AppEvent::ModelsFetched {
                 provider_id,
                 provider_name,
@@ -456,7 +575,7 @@ impl ChatWidget {
 
     /// Step 4: Show model picker from a pre-fetched model list (called from the
     /// `ModelsFetched` event handler — no I/O on the TUI thread).
-    pub(crate) fn show_model_picker(&mut self, provider_id: String, models: Vec<String>) {
+    pub(crate) fn show_model_picker(&mut self, provider_id: String, models: Vec<ProviderModel>) {
         if models.is_empty() {
             self.add_info_message(
                 format!("No models found for {provider_id}. Check your API key and base URL."),
@@ -468,8 +587,10 @@ impl ChatWidget {
         let items: Vec<SelectionItem> = models
             .iter()
             .map(|model| {
-                let mid = model.clone();
-                let mid_name = model.clone();
+                let mid = model.id.clone();
+                let display_name = model.name.clone();
+                let model_id = model.id.clone();
+                let search_value = format!("{} {}", model.id, model.name);
                 let pid = provider_id.clone();
                 let tx = self.app_event_tx.clone();
                 let action: crate::bottom_pane::SelectionAction =
@@ -480,9 +601,9 @@ impl ChatWidget {
                         });
                     });
                 SelectionItem {
-                    name: mid_name,
-                    description: None,
-                    search_value: Some(model.clone()),
+                    name: display_name,
+                    description: Some(model_id),
+                    search_value: Some(search_value),
                     actions: vec![action],
                     ..Default::default()
                 }
@@ -561,6 +682,36 @@ impl ChatWidget {
 // ---------------------------------------------------------------------------
 // Model fetching (provider /models endpoint)
 // ---------------------------------------------------------------------------
+
+/// Catalog models for `provider_id` from the cached models.dev provider list.
+/// Empty when the provider is unknown or the catalog cannot be read.
+fn catalog_models_for_provider(provider_id: &str) -> Vec<ProviderModel> {
+    load_providers()
+        .into_iter()
+        .find(|entry| entry.id == provider_id)
+        .map(|entry| entry.models)
+        .unwrap_or_default()
+}
+
+/// Combine catalog models with the provider's live `/models` ids. Catalog
+/// entries come first (they carry proper display names); live ids that are not
+/// in the catalog are appended so nothing the provider actually serves is lost.
+pub(crate) fn merge_provider_models(
+    catalog: Vec<ProviderModel>,
+    live_ids: Vec<String>,
+) -> Vec<ProviderModel> {
+    let mut merged = catalog;
+    for id in live_ids {
+        if !merged.iter().any(|model| model.id == id) {
+            merged.push(ProviderModel {
+                name: id.clone(),
+                id,
+                reasoning: false,
+            });
+        }
+    }
+    merged
+}
 
 fn fetch_models(base_url: &str, api_key: &str) -> Result<Vec<String>, String> {
     let url = format!("{}/models", base_url.trim_end_matches('/'));

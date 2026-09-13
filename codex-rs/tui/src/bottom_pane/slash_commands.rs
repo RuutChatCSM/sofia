@@ -114,6 +114,9 @@ pub(crate) fn commands_for_input(
 /// command lookup so a typed command can produce a specific unavailable message while the popup
 /// still hides it.
 pub(crate) fn find_builtin_command(name: &str, flags: BuiltinCommandFlags) -> Option<SlashCommand> {
+    // `/models` is the natural plural and a common way to invoke `/model`.
+    // Accept it as an alias rather than adding a second command variant.
+    let name = if name == "models" { "model" } else { name };
     let cmd = SlashCommand::from_str(name).ok().or_else(|| {
         let repeated_os = name.strip_prefix('g')?.strip_suffix("al")?;
         (!repeated_os.is_empty() && repeated_os.bytes().all(|byte| byte == b'o'))

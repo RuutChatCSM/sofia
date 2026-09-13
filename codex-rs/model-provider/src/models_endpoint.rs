@@ -130,6 +130,14 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         self.provider_info.has_command_auth()
     }
 
+    fn provider_key(&self) -> Option<String> {
+        self.provider_info
+            .base_url
+            .clone()
+            .filter(|base_url| !base_url.is_empty())
+            .or_else(|| Some(self.provider_info.name.clone()))
+    }
+
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
         Box::pin(OpenAiModelsEndpoint::uses_codex_backend(self))
     }

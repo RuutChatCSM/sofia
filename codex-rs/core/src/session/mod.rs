@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicU64;
 use std::time::SystemTime;
@@ -1900,6 +1899,9 @@ impl Session {
             config.tool_suggest =
                 resolve_tool_suggest_config_from_layer_stack(&config.config_layer_stack);
             config.mcp_servers = next_config.mcp_servers.clone();
+            config.model_provider_id = next_config.model_provider_id.clone();
+            config.model_provider = next_config.model_provider.clone();
+            config.model_providers = next_config.model_providers.clone();
             config.mcp_optional_startup_grace = next_config.mcp_optional_startup_grace;
             config.mcp_oauth_credentials_store_mode = next_config.mcp_oauth_credentials_store_mode;
             if let Err(err) = config.features.set_enabled(
@@ -1917,7 +1919,25 @@ impl Session {
                 warn!("failed to refresh MCP OAuth coordination config: {err}");
             }
             let config = Arc::new(config);
+            let previous_provider_id = state
+                .session_configuration
+                .original_config_do_not_use
+                .model_provider_id
+                .clone();
             state.session_configuration.original_config_do_not_use = Arc::clone(&config);
+            // A config change may switch providers (e.g. the user selected
+            // another provider's model). Rebuild the provider and swap it into
+            // the model client so the live session keeps working without being
+            // torn down and recreated. `config` above does not re-resolve
+            // `model_provider_id`, so use the freshly-loaded `next_config`.
+            if next_config.model_provider_id != previous_provider_id {
+                let provider = create_model_provider(
+                    next_config.model_provider.clone(),
+                    Some(Arc::clone(&self.services.auth_manager)),
+                );
+                self.services.model_client.set_provider(Arc::clone(&provider));
+                state.session_configuration.provider = provider;
+            }
             self.mark_mcp_runtime_dirty();
             let new_config = notify_config_contributors
                 .then(|| self.build_effective_session_config(&state.session_configuration));

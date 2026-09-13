@@ -1003,7 +1003,7 @@ async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled
 }
 
 #[tokio::test]
-async fn refresh_available_models_keeps_merging_for_api_auth() {
+async fn refresh_available_models_uses_provider_models_only_for_api_auth() {
     let remote_models = vec![remote_model(
         "api-auth-visible-remote",
         "API Auth Visible",
@@ -1024,8 +1024,6 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
             "test-api-key",
         ))),
     );
-    let mut expected = load_remote_models_from_file().expect("bundled models should parse");
-    expected.extend(remote_models);
 
     manager
         .refresh_available_models(
@@ -1035,7 +1033,10 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
         .await
         .expect("refresh succeeds");
 
-    assert_eq!(manager.get_remote_models().await, expected);
+    // A non-ChatGPT (API-key/custom) provider is authoritative for its own
+    // catalog: the bundled OpenAI models must not be merged in, otherwise the
+    // picker shows ChatGPT models the user never selected.
+    assert_eq!(manager.get_remote_models().await, remote_models);
     assert_eq!(endpoint.fetch_count(), 1, "expected a single model fetch");
 }
 

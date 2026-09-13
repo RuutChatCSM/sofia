@@ -29,6 +29,28 @@ use tracing::info;
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
 
+/// Cache filename for a provider. Providers with a stable key get their own
+/// file so switching providers never reuses another provider's catalog; a
+/// `None` key keeps the shared default file (used by tests and generic clients).
+fn model_cache_file_name(provider_key: Option<&str>) -> String {
+    match provider_key.filter(|key| !key.is_empty()) {
+        Some(key) => {
+            let slug: String = key
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() {
+                        character.to_ascii_lowercase()
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            format!("models_cache_{slug}.json")
+        }
+        None => MODEL_CACHE_FILE.to_string(),
+    }
+}
+
 /// Remote endpoint used by the OpenAI-compatible model manager.
 ///
 /// Implementations own provider-specific auth and transport details. The model
@@ -37,6 +59,13 @@ const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
 pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
     /// Returns whether this provider can authenticate command-scoped requests.
     fn has_command_auth(&self) -> bool;
+
+    /// Stable identity for the provider this endpoint serves, used to partition
+    /// the on-disk model cache so switching providers cannot reuse another
+    /// provider's catalog. Defaults to `None`, meaning the shared cache file.
+    fn provider_key(&self) -> Option<String> {
+        None
+    }
 
     /// Returns whether the currently resolved auth can use Codex backend-only models.
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool>;
@@ -237,7 +266,9 @@ impl OpenAiModelsManager {
         endpoint_client: Arc<dyn ModelsEndpointClient>,
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
-        let cache_path = codex_home.join(MODEL_CACHE_FILE);
+        let cache_path = codex_home.join(model_cache_file_name(
+            endpoint_client.provider_key().as_deref(),
+        ));
         Self::new_with_optional_cache(
             Some(Arc::new(FileModelsCache::new(
                 cache_path,
@@ -466,15 +497,25 @@ impl OpenAiModelsManager {
             return;
         }
 
+        // Prefer the provider's own catalog for non-ChatGPT auth (API-key and
+        // custom providers such as DeepSeek or Xiaomi). Mixing the bundled
+        // OpenAI models in here is what made the picker show ChatGPT models for
+        // users who never selected one. Fall back to the bundled catalog only
+        // when the provider returned nothing.
+        if !is_chatgpt_auth {
+            if !models.is_empty() {
+                let mut remote_models = models;
+                for model in &mut remote_models {
+                    // `/models` entries are API-accessible by definition.
+                    model.supported_in_api = true;
+                }
+                *self.remote_models.write().await = remote_models;
+            }
+            return;
+        }
+
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
         for model in models {
-            let mut model = model;
-            // Models returned by a non-ChatGPT provider's `/models` endpoint are by
-            // definition API-accessible. Without this, the `filter_by_auth` pass drops
-            // them because `supported_in_api` defaults to `false`.
-            if !is_chatgpt_auth && !model.supported_in_api {
-                model.supported_in_api = true;
-            }
             if let Some(existing_index) = existing_models
                 .iter()
                 .position(|existing| existing.slug == model.slug)
@@ -496,8 +537,9 @@ impl OpenAiModelsManager {
             codex_otel::start_global_timer("codex.remote_models.load_cache.duration_ms", &[]);
         let client_version = crate::client_version_to_whole();
         info!(client_version, "models cache: evaluating cache eligibility");
-        // TODO(celia-oai): Include provider identity in cache eligibility so switching
-        // providers does not reuse a fresh models_cache.json entry from another provider.
+        // Provider identity is encoded in the cache path (see
+        // `model_cache_file_name`), so switching providers reads a different
+        // file and cannot reuse another provider's catalog.
         let cache_entry = match cache.load(&client_version).await {
             Ok(Some(cache_entry)) => cache_entry,
             Ok(None) => {

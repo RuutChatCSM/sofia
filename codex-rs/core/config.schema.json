@@ -6513,6 +6513,16 @@
       "default": null,
       "description": "Compatibility-only settings retained so legacy `ghost_snapshot` config still loads."
     },
+    "goal_judge_budget": {
+      "description": "Maximum number of goal-judge continuations a single agent turn may issue before the model is allowed to stop. Each continuation costs one extra judge call plus a re-sample. Defaults to `5`.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "goal_judge_enabled": {
+      "description": "Enable the goal stop-condition judge. Before a turn is allowed to end, a lightweight judge model evaluates whether the user's request is fully complete; if not, the reason is fed back and the agent keeps working. Catches premature stops that string heuristics miss. Defaults to `true`.",
+      "type": "boolean"
+    },
     "goals": {
       "allOf": [
         {
@@ -6686,6 +6696,12 @@
         }
       ],
       "description": "Optional verbosity control for GPT-5 models (Responses API `text.verbosity`)."
+    },
+    "narration_continuation_budget": {
+      "description": "Maximum number of narration-only continuation nudges a single agent turn may issue before the model is allowed to stop. Higher values give the model more retries when it prematurely declares work complete, but each extra nudge adds latency and cost. Defaults to `3`.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
     },
     "notice": {
       "allOf": [

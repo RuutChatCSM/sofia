@@ -1,9 +1,11 @@
 {
   "name": "@openai/codex",
   "version": "0.0.0-dev",
-  "description": "Codex CLI is a coding agent from OpenAI that runs locally on your computer.",
+  "description": "Sofia is a local multi-model coding agent, based on the open-source Codex CLI.",
+  "private": true,
   "license": "Apache-2.0",
   "bin": {
+    "sofia": "bin/codex.js",
     "codex": "bin/codex.js"
   },
   "type": "module",

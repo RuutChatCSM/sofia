@@ -640,6 +640,14 @@ pub struct Config {
     /// built-in default.
     pub narration_continuation_budget: u32,
 
+    /// Whether the goal stop-condition judge is enabled. When enabled, a
+    /// lightweight judge evaluates whether the user's request is complete
+    /// before a turn is allowed to end.
+    pub goal_judge_enabled: bool,
+
+    /// Maximum number of goal-judge continuations a single agent turn may issue.
+    pub goal_judge_budget: u32,
+
     /// Key into the model_providers map that specifies which provider to use.
     pub model_provider_id: String,
 
@@ -4166,7 +4174,9 @@ impl Config {
                 .unwrap_or_default(),
             narration_continuation_budget: cfg
                 .narration_continuation_budget
-                .unwrap_or(3),
+                .unwrap_or(5),
+            goal_judge_enabled: cfg.goal_judge_enabled.unwrap_or(true),
+            goal_judge_budget: cfg.goal_judge_budget.unwrap_or(5),
             model_provider_id,
             model_provider,
             cwd: resolved_cwd,

@@ -322,6 +322,17 @@ pub struct ConfigToml {
     /// extra nudge adds latency and cost. Defaults to `3`.
     pub narration_continuation_budget: Option<u32>,
 
+    /// Enable the goal stop-condition judge. Before a turn is allowed to end, a
+    /// lightweight judge model evaluates whether the user's request is fully
+    /// complete; if not, the reason is fed back and the agent keeps working.
+    /// Catches premature stops that string heuristics miss. Defaults to `true`.
+    pub goal_judge_enabled: Option<bool>,
+
+    /// Maximum number of goal-judge continuations a single agent turn may issue
+    /// before the model is allowed to stop. Each continuation costs one extra
+    /// judge call plus a re-sample. Defaults to `5`.
+    pub goal_judge_budget: Option<u32>,
+
     /// Maximum poll window for background terminal output (`write_stdin`), in milliseconds.
     /// Default: `300000` (5 minutes).
     pub background_terminal_max_timeout: Option<u64>,

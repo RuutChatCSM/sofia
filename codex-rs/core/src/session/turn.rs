@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
 use crate::client::ModelClientSession;
@@ -80,7 +79,6 @@ use codex_file_system::FindUpErrorPolicy;
 use codex_file_system::find_nearest_ancestor_with_markers;
 use codex_login::CodexAuth;
 use codex_model_provider::RemoteCompactionSupport;
-use codex_model_provider_info::WireApi;
 use codex_protocol::ResponseItemId;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
@@ -154,13 +152,13 @@ pub(crate) struct McpStartupRequirements {
 /// the request loop; each forced continuation costs a fresh sampling request.
 /// Overridden by `narration_continuation_budget` in config.toml when present.
 #[allow(dead_code)]
-const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 3;
+const MAX_FORCED_CONTINUATIONS_PER_TURN: u32 = 5;
 
 /// Narration at or below this many characters (in a chat-completions turn that
-/// made no tool calls) is treated as a suspected premature stop unless it reads
-/// as a completed outcome report. Longer narration only triggers a forced
-/// continuation when it explicitly declares still-remaining work (see
-/// `declares_remaining_work`) or follows a failed tool execution.
+/// made no tool calls) was previously treated as a suspected premature stop.
+/// Now unused — the structural `ensureTrailingUserMessage` approach handles
+/// premature-stop prevention without content inspection.
+#[allow(dead_code)]
 const NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS: usize = 200;
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
@@ -191,10 +189,8 @@ pub(crate) async fn run_turn(
         turn_context.config.narration_continuation_budget,
         Ordering::Relaxed,
     );
-    sess.last_executed_tool_failed
-        .store(false, Ordering::Relaxed);
-    sess.last_executed_tool_mutated
-        .store(false, Ordering::Relaxed);
+    sess.goal_judge_budget
+        .store(turn_context.config.goal_judge_budget, Ordering::Relaxed);
     // Record results from hooks that finished after the previous turn before this turn's user prompt.
     drain_async_hook_results(&sess, &turn_context, /*before_user_prompt*/ true).await;
 
@@ -228,6 +224,17 @@ pub(crate) async fn run_turn(
     }
 
     let user_input = turn_user_input(&input);
+    // The goal the judge evaluates against: the user's textual request for this
+    // turn. Empty when the turn carries no text (e.g. tool-result-only resumes).
+    let turn_goal = user_input
+        .iter()
+        .filter_map(|input| match input {
+            UserInput::Text { text, .. } => Some(text.trim()),
+            _ => None,
+        })
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
     let allow_plugin_mentions =
         !crate::guardian::is_basic_session_source(&turn_context.session_source);
     let McpStartupRequirements {
@@ -634,6 +641,94 @@ pub(crate) async fn run_turn(
                     .await
                     {
                         return Ok(None);
+                    }
+
+                    // Invalid-output continuation: the model stopped with no
+                    // usable assistant text (only reasoning, or nothing at all).
+                    // Nudge it to produce a final answer or call a tool. Mirrors
+                    // mimocode's `autoContinueInvalidOutput`; shares the per-turn
+                    // continuation budget with the goal judge.
+                    if turn_context.config.goal_judge_enabled
+                        && last_agent_message.is_none()
+                        && !matches!(turn_context.session_source, SessionSource::Internal(_))
+                        && sess
+                            .goal_judge_budget
+                            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
+                                remaining.checked_sub(1)
+                            })
+                            .is_ok()
+                    {
+                        let reminder = crate::goal_judge::build_invalid_output_message();
+                        sess.record_response_item_and_emit_turn_item(&turn_context, reminder)
+                            .await;
+                        sess.send_event(
+                            &turn_context,
+                            EventMsg::Warning(WarningEvent {
+                                message: "Model produced no usable output; nudging it to continue."
+                                    .to_string(),
+                            }),
+                        )
+                        .await;
+                        sess.input_queue
+                            .accept_mailbox_delivery_for_current_turn(
+                                &sess.active_turn,
+                                &turn_context.sub_id,
+                            )
+                            .await;
+                        continue;
+                    }
+
+                    // Goal stop-condition judge: before honoring the stop, ask a
+                    // judge model whether the user's request is complete. If not,
+                    // inject its reason as a synthetic user turn and keep
+                    // working. Bounded per turn and fail-open (mirrors
+                    // mimocode's `goalGate`). Skipped when the model handed
+                    // control back with a question, for internal sessions, or
+                    // when there is no textual goal to judge against.
+                    if turn_context.config.goal_judge_enabled
+                        && !turn_goal.trim().is_empty()
+                        && !matches!(turn_context.session_source, SessionSource::Internal(_))
+                        && !last_agent_message
+                            .as_deref()
+                            .is_some_and(|message| message.contains('?') || message.contains('？'))
+                    {
+                        match crate::goal_judge::judge_goal(
+                            &sess,
+                            &turn_context,
+                            &mut client_session,
+                            &turn_goal,
+                            last_agent_message.as_deref(),
+                        )
+                        .await
+                        {
+                            crate::goal_judge::GoalVerdict::Continue(reason) => {
+                                let reminder =
+                                    crate::goal_judge::build_continuation_message(&reason);
+                                sess.record_response_item_and_emit_turn_item(
+                                    &turn_context,
+                                    reminder,
+                                )
+                                .await;
+                                sess.send_event(
+                                    &turn_context,
+                                    EventMsg::Warning(WarningEvent {
+                                        message: format!(
+                                            "Goal not satisfied — continuing: {reason}"
+                                        ),
+                                    }),
+                                )
+                                .await;
+                                sess.input_queue
+                                    .accept_mailbox_delivery_for_current_turn(
+                                        &sess.active_turn,
+                                        &turn_context.sub_id,
+                                    )
+                                    .await;
+                                continue;
+                            }
+                            crate::goal_judge::GoalVerdict::AcceptStop
+                            | crate::goal_judge::GoalVerdict::FailOpen => {}
+                        }
                     }
                     break;
                 }
@@ -2270,17 +2365,6 @@ async fn drain_in_flight(
                     &envelope.item,
                 )
                 .await;
-                // Keep the turn's "last executed tool result" ledger honest:
-                // only a drained tool result can clear or set it, so claims in
-                // later narration never count as evidence.
-                if let Some(success) = executed_tool_result_success(&envelope.item) {
-                    sess.last_executed_tool_failed
-                        .store(!success, Ordering::Relaxed);
-                    sess.last_executed_tool_mutated.store(
-                        success && tool_result_mutates_state(&envelope.item),
-                        Ordering::Relaxed,
-                    );
-                }
                 sess.record_annotated_conversation_items(&turn_context, vec![envelope])
                     .await;
             }
@@ -2290,54 +2374,6 @@ async fn drain_in_flight(
         }
     }
     Ok(())
-}
-
-/// The success/failure of a drained tool result, when the omitted item carries a
-/// structured outcome. Tool outputs are tagged with `output.success`; web-search
-/// style outputs carry a status string instead.
-fn executed_tool_result_success(item: &ResponseItem) -> Option<bool> {
-    match item {
-        ResponseItem::FunctionCallOutput { output, .. }
-        | ResponseItem::CustomToolCallOutput { output, .. } => {
-            if let Some(text) = output.body.to_text()
-                && let Some(exit_code) = exec_exit_code(&text)
-            {
-                return Some(exit_code == 0);
-            }
-            output.success
-        }
-        ResponseItem::ToolSearchOutput { status, .. } => Some(status != "error"),
-        _ => None,
-    }
-}
-
-/// Whether a drained tool result mutated persistent state (by tool name). The
-/// canonical mutators are the patch and plan editors plus stdin-writers;
-/// read-only executors and checks are deliberately excluded so passing tests and
-/// grep-diff verification never count as mutations.
-fn tool_result_mutates_state(item: &ResponseItem) -> bool {
-    const MUTATING_TOOLS: [&str; 4] = ["apply_patch", "write_stdin", "update_plan", "plan"];
-    let name = match item {
-        ResponseItem::FunctionCallOutput { name, .. }
-        | ResponseItem::CustomToolCallOutput { name, .. } => name.as_deref(),
-        _ => None,
-    };
-    name.is_some_and(|name| MUTATING_TOOLS.contains(&name))
-}
-
-/// The process exit code from the canonical codex shell-result format
-/// ("Process exited with code N"), using the last reported line so a compound
-/// command's histogram settles on its final status.
-fn exec_exit_code(text: &str) -> Option<i32> {
-    const PREFIX: &str = "process exited with code ";
-    let lower = text.to_lowercase();
-    let index = lower.rfind(PREFIX)?;
-    let digits: String = lower[index + PREFIX.len()..]
-        .chars()
-        .take_while(|c| c.is_ascii_digit() || *c == '-')
-        .take(8)
-        .collect();
-    digits.parse::<i32>().ok()
 }
 
 fn assign_missing_streamed_response_item_id(
@@ -2353,165 +2389,6 @@ fn assign_missing_streamed_response_item_id(
         .filter(|item_id| !item_id.is_empty());
     item.set_id(active_item_id);
     Session::assign_missing_response_item_id(item);
-}
-
-/// The classification of the most recently executed tool result in the turn,
-/// feeding the narration-continuation gate. Everything not flagged as a failed
-/// execution or a successful mutation reads as an ordinary settled step: the
-/// narration-only stop can still be treated as final.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExecutedToolOutcome {
-    /// No failed execution and no successful mutation recorded (no tool yet,
-    /// an unstructured result, or the last tool succeeded read-only).
-    Unremarkable,
-    /// The last tool succeeded but mutated persistent state, so a completed
-    /// outcome claim still needs verification evidence.
-    Mutated,
-    /// The last tool produced an error result, so the turn must not end on the
-    /// unresolved failure.
-    Failed,
-}
-
-/// Returns true when a chat-completions model ended its response with narration
-/// and no tool call — the signature of a premature stop where the model narrated
-/// the next step but forgot to request its tool. Re-sampling then nudges the
-/// model to pick the work back up, up to a bounded budget per turn
-/// (`MAX_FORCED_CONTINUATIONS_PER_TURN`). Never fires for Responses-wire
-/// providers (their `end_turn` is authoritative), plan mode, responses that
-/// already made tool calls, or responses that hand control back to the user with
-/// a question.
-///
-/// Four evidence classes trigger a continuation:
-///   - the narration explicitly declares further work that it never performs
-///     ("I need to ...", "Let me also check ..."), at any length;
-///   - the most recently executed tool call failed and nothing has succeeded
-///     since (`last_executed_tool` is `Failed`), so the turn ends on an
-///     unresolved error even if the narration does not announce more work;
-///   - the most recently executed tool call mutated state and nothing has
-///     verified it since (`last_executed_tool` is `Mutated`), so a completed
-///     outcome claim over a bare mutation lacks evidence;
-///   - short narration on its own is suspicious (a trailing thought the model
-///     probably intended to act on) — but only when it does not read as a
-///     completed outcome report, so genuine one-line summaries ("Review
-///     complete; no changes were made.") are never force-continued.
-fn should_force_narration_continuation(
-    narration_continuation_budget: &AtomicU32,
-    chat_completions_wire: bool,
-    last_agent_message: &Option<String>,
-    plan_mode: bool,
-    tool_calls_made: bool,
-    last_executed_tool: ExecutedToolOutcome,
-) -> bool {
-    if tool_calls_made || plan_mode || !chat_completions_wire {
-        return false;
-    }
-    let Some(message) = last_agent_message.as_deref() else {
-        return false;
-    };
-    if ends_by_asking_user(message) {
-        return false;
-    }
-    let declares_remaining_work = declares_remaining_work(message);
-    if !declares_remaining_work
-        && matches!(last_executed_tool, ExecutedToolOutcome::Unremarkable)
-        && (reports_completed_outcome(message)
-            || message.chars().count() > NARRATION_ONLY_CONTINUATION_THRESHOLD_CHARS)
-    {
-        return false;
-    }
-    narration_continuation_budget
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
-            remaining.checked_sub(1)
-        })
-        .is_ok()
-}
-
-/// Chat-completions replies that end with a question hand control back to the
-/// user, so they must never be force-continued.
-fn ends_by_asking_user(message: &str) -> bool {
-    matches!(
-        message.trim_end().chars().next_back(),
-        Some('?') | Some('？')
-    )
-}
-
-/// Cheap, model-free detection that a narration-only reply announces further
-/// work instead of reporting an outcome. This is the failure mode behind
-/// premature stops for chat-completions models: a multi-sentence narration that
-/// promises actions ("I need to ...", "Let me also check ...") and then ends
-/// without calling any tool. Only explicit forward-looking markers count, so a
-/// long final answer that merely describes what was already done is not matched.
-/// "let me know" closings are treated as completions, not remaining work.
-fn declares_remaining_work(message: &str) -> bool {
-    const FORWARD_MARKERS: [&str; 24] = [
-        "i need to",
-        "i need ",
-        "i'll ",
-        "i will ",
-        "i'm going to",
-        "i am going to",
-        "i'm about to",
-        "i would like to",
-        "i want to",
-        "let me",
-        "have to ",
-        "need to ",
-        "want to ",
-        "going to ",
-        "have yet to",
-        "haven't",
-        "not yet",
-        "still need",
-        "still have",
-        "start by",
-        "first i",
-        "next i",
-        "then i",
-        "before i",
-    ];
-    let message = message.to_lowercase();
-    if message.contains("let me know") {
-        return false;
-    }
-    FORWARD_MARKERS
-        .iter()
-        .any(|marker| message.contains(marker))
-}
-
-/// Cheap, model-free detection that a narration-only reply reports a finished
-/// outcome rather than trailing off toward an intended action. Guards the short
-/// narration continuation trigger so genuine one-line summaries are not
-/// force-continued (a real failure mode observed after the tool-call finish
-/// reason: "Review complete; no changes were made.").
-fn reports_completed_outcome(message: &str) -> bool {
-    const COMPLETION_MARKERS: [&str; 22] = [
-        "complete",
-        "completed",
-        "done",
-        "finished",
-        "all green",
-        "passing",
-        "no changes",
-        "no further",
-        "nothing left",
-        "nothing remains",
-        "as expected",
-        "successfully",
-        "verified",
-        "confirmed",
-        "no issues",
-        "no modifications",
-        "worked",
-        "returned",
-        "the result",
-        "the findings",
-        "summary",
-        "will leave it",
-    ];
-    let message = message.to_lowercase();
-    COMPLETION_MARKERS
-        .iter()
-        .any(|marker| message.contains(marker))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2899,7 +2776,6 @@ async fn try_run_sampling_request(
                 end_turn,
             } => {
                 let response_tool_call_ids = std::mem::take(&mut analytics_tool_call_ids);
-                let tool_calls_made = !response_tool_call_ids.is_empty();
                 sess.services
                     .analytics_events_client
                     .track_code_mode_tool_call(
@@ -2936,51 +2812,6 @@ async fn try_run_sampling_request(
                     // The response still carries tool calls to execute; the outer
                     // loop must re-sample after they drain.
                     needs_follow_up = true;
-                } else if matches!(
-                    turn_context.provider.info().wire_api,
-                    WireApi::ChatCompletions
-                ) {
-                    // A chat-completions narration-only stop: the model had no
-                    // tools in flight, so whether to continue is decided entirely
-                    // by the gate. This also clears a stale follow-up flag from
-                    // an earlier tool-call iteration of this turn. Other wires
-                    // keep their existing end_turn semantics untouched.
-                    let last_executed_tool =
-                        if sess.last_executed_tool_failed.load(Ordering::Relaxed) {
-                            ExecutedToolOutcome::Failed
-                        } else if sess.last_executed_tool_mutated.load(Ordering::Relaxed) {
-                            ExecutedToolOutcome::Mutated
-                        } else {
-                            ExecutedToolOutcome::Unremarkable
-                        };
-                    needs_follow_up = should_force_narration_continuation(
-                        &sess.narration_continuation_budget,
-                        /*chat_completions_wire*/ true,
-                        &last_agent_message,
-                        plan_mode,
-                        tool_calls_made,
-                        last_executed_tool,
-                    );
-                    if needs_follow_up {
-                        info!(
-                            narration_chars = last_agent_message
-                                .as_ref()
-                                .map(|message| message.chars().count()),
-                            declares_remaining_work = last_agent_message
-                                .as_ref()
-                                .is_some_and(|message| declares_remaining_work(message)),
-                            reports_completed_outcome = last_agent_message
-                                .as_ref()
-                                .is_some_and(|message| reports_completed_outcome(message)),
-                            last_executed_tool = ?last_executed_tool,
-                            budget_remaining =
-                                sess.narration_continuation_budget.load(Ordering::Relaxed),
-                            "force-continuing precedence-stop: chat-completions reply was \
-                             narration with no tool call that has not asked the user, did \
-                             not report a completed outcome, and was not preceded by a \
-                             successful action"
-                        );
-                    }
                 }
                 break Ok(SamplingRequestResult {
                     needs_follow_up,

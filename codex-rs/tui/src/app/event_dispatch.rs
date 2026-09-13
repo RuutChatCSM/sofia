@@ -785,6 +785,13 @@ impl App {
                 // Save to providers.json config file.
                 let mut config =
                     crate::chatwidget::connect_provider_popup::load_providers_config();
+                // Preserve any previously discovered model catalog so a key
+                // re-entry does not wipe it before the next fetch completes.
+                let previous_models = config
+                    .providers
+                    .get(&provider_id)
+                    .map(|entry| entry.models.clone())
+                    .unwrap_or_default();
                 config.providers.insert(
                     provider_id.clone(),
                     crate::chatwidget::connect_provider_popup::ProviderConfig {
@@ -792,6 +799,7 @@ impl App {
                         base_url: base_url.clone(),
                         wire_api: wire_api.clone(),
                         name: provider_name.clone(),
+                        models: previous_models,
                     },
                 );
                 if let Err(err) =
@@ -825,18 +833,22 @@ impl App {
             }
             AppEvent::ModelsFetched {
                 provider_id,
-                provider_name: _,
+                provider_name,
                 result,
             } => {
                 // Step 3b: Async fetch completed — show model picker or error.
                 match result {
                     Ok(models) => {
+                        crate::chatwidget::connect_provider_popup::save_provider_models(
+                            &provider_id,
+                            &models,
+                        );
                         self.chat_widget
                             .show_model_picker(provider_id, models);
                     }
                     Err(err) => {
                         self.chat_widget.add_error_message(format!(
-                            "Could not fetch models for {provider_id}: {err}"
+                            "Could not fetch models for {provider_name}: {err}"
                         ));
                     }
                 }
@@ -948,23 +960,28 @@ impl App {
                         .add_error_message(format!("Failed to reload config: {err}"));
                 }
 
-                // Apply the model to the live session.
-                let model_slug = format!("{provider_id}/{model_id}");
-                self.chat_widget.set_model(&model_slug);
+                // Apply the model to the live session. `reload_user_config`
+                // above already swapped the engine's provider in place, so the
+                // current session (and its history) is preserved — no new
+                // session needed.
+                self.chat_widget.set_model(&model_id);
                 let _ = self
                     .sync_active_thread_model_setting(
                         app_server,
-                        model_slug,
+                        model_id,
                         Some(effort_for_sync),
                     )
                     .await;
 
-                // Dismiss all popups, then restart the session so the new
-                // provider takes effect. The provider is fixed at session start.
                 self.chat_widget.dismiss_all_views();
-                self.app_event_tx.send(AppEvent::NewSession {
-                    name: None,
-                });
+
+                // Onboarding has no session to preserve, so start one. An
+                // existing session keeps its history and just switches provider.
+                if self.chat_widget.thread_id().is_none() {
+                    self.app_event_tx.send(AppEvent::NewSession {
+                        name: None,
+                    });
+                }
             }
             AppEvent::FatalExitRequest(message) => {
                 return Ok(AppRunControl::Exit(ExitReason::Fatal(message)));

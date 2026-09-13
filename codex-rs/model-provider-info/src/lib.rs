@@ -886,14 +886,13 @@ fn home_dir() -> Option<std::path::PathBuf> {
 }
 
 /// Read the API key for `env_key` from `sofia-auth.json`, if present.
-/// Searches `CODEX_HOME`, then legacy `~/.sofia`, `~/.config/sofia`, `~/.codex`.
+/// Searches `CODEX_HOME`, then legacy `~/.sofia` and `~/.config/sofia`.
 pub fn api_key_from_auth_file(env_key: &str) -> Option<String> {
     let codex_home = codex_utils_home_dir::codex_home_string();
     let mut candidates = vec![std::path::PathBuf::from(&codex_home)];
     for home in home_dir().into_iter() {
         candidates.push(home.join(".sofia"));
         candidates.push(home.join(".config").join("sofia"));
-        candidates.push(home.join(".codex"));
     }
     candidates.sort();
     candidates.dedup();
