@@ -2,7 +2,6 @@ use super::*;
 
 fn sample_provider() -> ProviderConfig {
     ProviderConfig {
-        api_key: "sk-test".to_string(),
         base_url: "https://api.xiaomimimo.com/v1".to_string(),
         wire_api: "chat_completions".to_string(),
         name: "Xiaomi (MiMo)".to_string(),
@@ -105,7 +104,7 @@ fn preserves_unrelated_top_level_keys() {
 fn parse_provider_models_extracts_names_and_falls_back_to_id() {
     let provider = serde_json::json!({
         "models": {
-            "deepseek-flash": { "name": "DeepSeek V4.1 Flash", "reasoning": true },
+            "deepseek-flash": { "name": "DeepSeek V4.1 Flash", "reasoning": true, "limit": { "context": 1048576 } },
             "deepseek-v4-pro": {}
         }
     });
@@ -119,12 +118,14 @@ fn parse_provider_models_extracts_names_and_falls_back_to_id() {
         .expect("flash present");
     assert_eq!(flash.name, "DeepSeek V4.1 Flash");
     assert!(flash.reasoning);
+    assert_eq!(flash.context_window, Some(1_048_576));
     let pro = models
         .iter()
         .find(|model| model.id == "deepseek-v4-pro")
         .expect("pro present");
     assert_eq!(pro.name, "deepseek-v4-pro");
     assert!(!pro.reasoning);
+    assert_eq!(pro.context_window, None);
 }
 
 #[test]
@@ -133,6 +134,7 @@ fn merge_provider_models_keeps_catalog_names_and_appends_live_only_ids() {
         id: "deepseek-flash".to_string(),
         name: "DeepSeek V4.1 Flash".to_string(),
         reasoning: true,
+        context_window: Some(1_048_576),
     }];
     let merged = merge_provider_models(
         catalog,
@@ -145,11 +147,13 @@ fn merge_provider_models_keeps_catalog_names_and_appends_live_only_ids() {
                 id: "deepseek-flash".to_string(),
                 name: "DeepSeek V4.1 Flash".to_string(),
                 reasoning: true,
+                context_window: Some(1_048_576),
             },
             ProviderModel {
                 id: "deepseek-v4-pro".to_string(),
                 name: "deepseek-v4-pro".to_string(),
                 reasoning: false,
+                context_window: None,
             },
         ]
     );

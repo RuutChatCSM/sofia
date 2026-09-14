@@ -3,8 +3,8 @@
 //! Flow: Select provider → Enter API key → Fetch models → Select model
 //! → Select variant (reasoning effort) → Close → Start prompting.
 //!
-//! Provider catalog comes from models.dev (cached). Credentials stored in
-//! `~/.sofia/providers.json`.
+//! Provider catalog comes from models.dev (cached). Credentials are stored in
+//! `~/.sofia/sofia-auth.json`; `providers.json` holds only catalog/metadata.
 
 use super::*;
 use crate::bottom_pane::SelectionItem;
@@ -39,6 +39,11 @@ pub(crate) struct ProviderModel {
     /// `reasoning`). Drives the effort picker for catalog-only models.
     #[serde(default)]
     pub reasoning: bool,
+    /// Model context window in tokens (models.dev `limit.context`). Persisted so
+    /// the engine can size auto-compaction instead of growing until the provider
+    /// rejects the request. `None` when the catalog does not advertise one.
+    #[serde(default)]
+    pub context_window: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +57,6 @@ pub(crate) struct ProvidersConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ProviderConfig {
-    pub api_key: String,
     pub base_url: String,
     pub wire_api: String,
     pub name: String,
@@ -61,6 +65,14 @@ pub(crate) struct ProviderConfig {
     /// resolution keep working offline and across restarts.
     #[serde(default)]
     pub models: Vec<ProviderModel>,
+}
+
+/// The credential variable name codex derives for a provider: `<ID>_API_KEY`
+/// (uppercased, `-` -> `_`). This is the `env_key` written to `config.toml` and
+/// the key resolved from `sofia-auth.json` — the API key itself is never stored
+/// in `providers.json`.
+pub(crate) fn provider_env_key(provider_id: &str) -> String {
+    format!("{}_API_KEY", provider_id.to_uppercase().replace('-', "_"))
 }
 
 fn providers_config_path() -> String {
@@ -198,8 +210,24 @@ pub(crate) fn build_provider_config_toml(
         toml::Value::String(effort.to_string()),
     );
 
+    // Size auto-compaction from the catalog's context window when known.
+    // Chat-completions catalog models otherwise carry no window, which leaves
+    // the auto-compaction threshold unset and lets the context grow until the
+    // provider rejects the request.
+    if let Some(context_window) = provider_info
+        .models
+        .iter()
+        .find(|model| model.id == model_id)
+        .and_then(|model| model.context_window)
+    {
+        doc.insert(
+            "model_context_window".to_string(),
+            toml::Value::Integer(context_window),
+        );
+    }
+
     // Build the [model_providers.X] table.
-    let env_key_name = format!("{}_API_KEY", provider_id.to_uppercase().replace('-', "_"));
+    let env_key_name = provider_env_key(provider_id);
     let providers = doc
         .entry("model_providers".to_string())
         .or_insert_with(|| toml::Value::Table(toml::Table::new()));
@@ -331,6 +359,10 @@ fn parse_provider_models(provider: &serde_json::Value) -> Vec<ProviderModel> {
                         .get("reasoning")
                         .and_then(|reasoning| reasoning.as_bool())
                         .unwrap_or(false),
+                    context_window: model
+                        .get("limit")
+                        .and_then(|limit| limit.get("context"))
+                        .and_then(serde_json::Value::as_i64),
                 })
                 .collect()
         })
@@ -560,7 +592,14 @@ impl ChatWidget {
             // example DeepSeek V4.1 Flash) stay selectable, and fall back to the
             // catalog entirely when the endpoint is unavailable.
             let catalog = catalog_models_for_provider(&provider_id);
-            let result = match fetch_models(&provider_config.base_url, &provider_config.api_key) {
+            // The key lives only in `sofia-auth.json` (resolved via `env_key`);
+            // resolve it here for the live `/models` request.
+            let api_key =
+                codex_model_provider_info::api_key_from_auth_file(&provider_env_key(&provider_id));
+            let result = match fetch_models(
+                &provider_config.base_url,
+                api_key.as_deref().unwrap_or_default(),
+            ) {
                 Ok(live_models) => Ok(merge_provider_models(catalog, live_models)),
                 Err(_) if !catalog.is_empty() => Ok(catalog),
                 Err(err) => Err(err),
@@ -707,6 +746,7 @@ pub(crate) fn merge_provider_models(
                 name: id.clone(),
                 id,
                 reasoning: false,
+                context_window: None,
             });
         }
     }

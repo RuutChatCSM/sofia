@@ -1935,7 +1935,9 @@ impl Session {
                     next_config.model_provider.clone(),
                     Some(Arc::clone(&self.services.auth_manager)),
                 );
-                self.services.model_client.set_provider(Arc::clone(&provider));
+                self.services
+                    .model_client
+                    .set_provider(Arc::clone(&provider));
                 state.session_configuration.provider = provider;
             }
             self.mark_mcp_runtime_dirty();

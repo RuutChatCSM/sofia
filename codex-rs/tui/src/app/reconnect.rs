@@ -266,10 +266,8 @@ impl App {
             ModelCatalog::new(bootstrap.available_models)
                 .with_collaboration_modes(bootstrap.collaboration_modes),
         );
-        self.model_catalog.add_connected_provider_models(
-            &self.config.model_provider_id,
-            &self.config.codex_home,
-        );
+        self.model_catalog
+            .add_connected_provider_models(&self.config.model_provider_id, &self.config.codex_home);
         self.pending_app_server_requests.clear();
         let pending_displayed_profile =
             displayed.is_some_and(|id| self.pending_server_profiles.contains_key(&id));

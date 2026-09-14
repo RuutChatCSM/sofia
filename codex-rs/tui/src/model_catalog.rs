@@ -80,8 +80,7 @@ impl ModelCatalog {
 
         let config =
             crate::chatwidget::connect_provider_popup::load_providers_config_in(codex_home);
-        let cached =
-            crate::chatwidget::connect_provider_popup::cached_catalog_models(codex_home);
+        let cached = crate::chatwidget::connect_provider_popup::cached_catalog_models(codex_home);
         for (provider_id, provider) in config.providers {
             // Always union the models.dev catalog (authoritative names and
             // reasoning flags) with whatever the live endpoint returned. A
@@ -90,8 +89,7 @@ impl ModelCatalog {
             let stored_ids = provider.models.into_iter().map(|model| model.id).collect();
             let catalog = cached.get(&provider_id).cloned().unwrap_or_default();
             let models = crate::chatwidget::connect_provider_popup::merge_provider_models(
-                catalog,
-                stored_ids,
+                catalog, stored_ids,
             );
             let is_active = provider_id == active_provider_id;
             for model in models {

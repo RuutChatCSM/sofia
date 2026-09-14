@@ -43,10 +43,12 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 async fn thread_settings_update_switches_provider_for_next_turn() -> Result<()> {
     let original = create_mock_responses_server_sequence_unchecked(vec![
         create_final_assistant_message_sse_response("wrong provider")?,
-    ]).await;
+    ])
+    .await;
     let selected = create_mock_responses_server_sequence_unchecked(vec![
         create_final_assistant_message_sse_response("selected provider")?,
-    ]).await;
+    ])
+    .await;
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &original.uri())?;
     let config_path = codex_home.path().join("config.toml");
@@ -59,15 +61,24 @@ async fn thread_settings_update_switches_provider_for_next_turn() -> Result<()> 
     write_models_cache(codex_home.path())?;
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
-        .build_initialized_with_timeout(DEFAULT_TIMEOUT).await?;
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
     let thread = start_thread(&mut mcp).await?.thread;
-    send_thread_settings_update(&mut mcp, ThreadSettingsUpdateParams {
-        thread_id: thread.id.clone(),
-        model_provider: Some("selected".to_string()),
-        ..Default::default()
-    }).await?;
+    send_thread_settings_update(
+        &mut mcp,
+        ThreadSettingsUpdateParams {
+            thread_id: thread.id.clone(),
+            model_provider: Some("selected".to_string()),
+            ..Default::default()
+        },
+    )
+    .await?;
     start_text_turn(&mut mcp, thread.id).await?;
-    timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_notification_message("turn/completed")).await??;
+    timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
     assert!(received_response_bodies(&original).await?.is_empty());
     assert!(!received_response_bodies(&selected).await?.is_empty());
     Ok(())

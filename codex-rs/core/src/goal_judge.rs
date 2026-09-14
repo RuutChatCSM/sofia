@@ -110,9 +110,9 @@ pub(crate) async fn judge_goal(
         ..Default::default()
     };
 
-    let responses_metadata =
-        sess.responses_metadata(turn_context, CodexResponsesRequestKind::Turn)
-            .await;
+    let responses_metadata = sess
+        .responses_metadata(turn_context, CodexResponsesRequestKind::Turn)
+        .await;
 
     let raw = match collect_verdict_text(
         sess,
@@ -286,9 +286,14 @@ fn render_item(item: &ResponseItem) -> Option<String> {
             if text.is_empty() {
                 return None;
             }
-            Some(format!("[assistant] {}", truncate(text, MAX_ASSISTANT_CHARS)))
+            Some(format!(
+                "[assistant] {}",
+                truncate(text, MAX_ASSISTANT_CHARS)
+            ))
         }
-        ResponseItem::FunctionCall { name, arguments, .. } => Some(format!(
+        ResponseItem::FunctionCall {
+            name, arguments, ..
+        } => Some(format!(
             "[tool call] {name} {}",
             truncate(arguments, MAX_TOOL_CALL_CHARS)
         )),

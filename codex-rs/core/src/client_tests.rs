@@ -1469,7 +1469,9 @@ fn chat_completions_body_maps_developer_role_to_system() {
     assert_eq!(messages[1]["content"], "be concise");
     assert_eq!(messages[2]["role"], "user");
     assert!(
-        messages.iter().all(|message| message["role"] != "developer"),
+        messages
+            .iter()
+            .all(|message| message["role"] != "developer"),
         "no message may carry the developer role"
     );
 }
@@ -1545,15 +1547,13 @@ fn chat_completions_body_carries_reasoning_content_on_tool_call_message() {
     assert_eq!(messages[2]["role"], "assistant");
     assert_eq!(messages[2]["content"], "Listing the files now");
     assert_eq!(
-        messages[2]["reasoning_content"],
-        "I should list the files",
+        messages[2]["reasoning_content"], "I should list the files",
         "reasoning_content must be passed back on the assistant text message"
     );
     assert_eq!(messages[3]["role"], "assistant");
     assert_eq!(messages[3]["tool_calls"][0]["id"], "call_1");
     assert_eq!(
-        messages[3]["reasoning_content"],
-        "I should list the files",
+        messages[3]["reasoning_content"], "I should list the files",
         "reasoning_content must be passed back on the tool-call message"
     );
     assert_eq!(messages[4]["role"], "tool");

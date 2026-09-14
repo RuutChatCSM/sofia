@@ -22,6 +22,14 @@ fn tokens_remaining(limit: Option<i64>, used: i64) -> Option<i64> {
     limit.map(|limit| limit.saturating_sub(used).max(0))
 }
 
+/// Catalog models discovered from a provider's `/models` endpoint (chat
+/// completions) frequently carry no context window. Without a window the
+/// auto-compaction threshold is unset and the context grows until the provider
+/// rejects the request. Fall back to a conservative window so compaction can
+/// still trigger; a real window (config.toml `model_context_window` or model
+/// metadata) always takes precedence.
+const FALLBACK_CONTEXT_WINDOW_TOKENS: i64 = 272_000;
+
 pub(crate) async fn context_window_token_status(
     sess: &Session,
     turn_context: &TurnContext,
@@ -80,7 +88,10 @@ async fn context_window_token_status_with_config(
         };
 
     // The model's full context window is a hard cap, independent of the auto-compaction scope.
-    let full_context_window_limit = model_info.resolved_context_window().map(|context_window| {
+    let resolved_context_window = model_info
+        .resolved_context_window()
+        .or(Some(FALLBACK_CONTEXT_WINDOW_TOKENS));
+    let full_context_window_limit = resolved_context_window.map(|context_window| {
         context_window.saturating_mul(model_info.effective_context_window_percent) / 100
     });
 

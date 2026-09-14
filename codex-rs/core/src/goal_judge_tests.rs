@@ -5,10 +5,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn parse_verdict_accepts_satisfied_and_impossible() {
     assert_eq!(parse_verdict("SATISFIED"), GoalVerdict::AcceptStop);
-    assert_eq!(
-        parse_verdict("  satisfied  \n"),
-        GoalVerdict::AcceptStop
-    );
+    assert_eq!(parse_verdict("  satisfied  \n"), GoalVerdict::AcceptStop);
     assert_eq!(
         parse_verdict("IMPOSSIBLE: no network access"),
         GoalVerdict::AcceptStop
@@ -30,7 +27,10 @@ fn parse_verdict_continues_on_incomplete_with_reason() {
 
 #[test]
 fn parse_verdict_fails_open_on_unparseable_output() {
-    assert_eq!(parse_verdict("I think it's probably done"), GoalVerdict::FailOpen);
+    assert_eq!(
+        parse_verdict("I think it's probably done"),
+        GoalVerdict::FailOpen
+    );
     assert_eq!(parse_verdict(""), GoalVerdict::FailOpen);
 }
 

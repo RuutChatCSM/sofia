@@ -2995,8 +2995,7 @@ requires_openai_auth = {requires_openai_auth}
         );
 
         assert_eq!(
-            params.model_providers,
-            None,
+            params.model_providers, None,
             "session lookup must not be scoped to the active provider"
         );
         assert_eq!(

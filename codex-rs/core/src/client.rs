@@ -495,7 +495,8 @@ impl ModelClient {
         Self {
             state: Arc::new(ModelClientState {
                 thread_id,
-                provider: std::sync::RwLock::new(model_provider),                auth_env_telemetry,
+                provider: std::sync::RwLock::new(model_provider),
+                auth_env_telemetry,
                 session_source,
                 originator,
                 model_verbosity,
@@ -3525,7 +3526,10 @@ fn build_chat_completions_body(
         let role = message["role"].as_str().unwrap_or("");
         if role == "assistant"
             && message.get("content").and_then(|c| c.as_str()) == Some("")
-            && message.get("tool_calls").and_then(|tc| tc.as_array()).is_none_or(|tc| tc.is_empty())
+            && message
+                .get("tool_calls")
+                .and_then(|tc| tc.as_array())
+                .is_none_or(|tc| tc.is_empty())
         {
             return false;
         }
@@ -3545,10 +3549,7 @@ fn build_chat_completions_body(
     // messages (Bedrock) need a user message after the assistant's last turn.
     // This also structurally nudges the model to continue when the conversation
     // is re-sent after tool execution.
-    if messages
-        .last()
-        .is_some_and(|m| m["role"] == "assistant")
-    {
+    if messages.last().is_some_and(|m| m["role"] == "assistant") {
         messages.push(json!({
             "role": "user",
             "content": "Continue."

@@ -156,4 +156,3 @@ fn realtime_user_verification_notice_excludes_request_payload() {
         )),
     );
 }
-

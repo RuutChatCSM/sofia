@@ -759,14 +759,13 @@ impl App {
                 wire_api,
             } => {
                 // Always prompt for the API key so users can (re)enter or change
-                // it even for an already-configured provider. Pre-fill the stored
-                // key if present.
-                let config = crate::chatwidget::connect_provider_popup::load_providers_config();
-                let existing_key = config
-                    .providers
-                    .get(&provider_id)
-                    .map(|entry| entry.api_key.clone())
-                    .unwrap_or_default();
+                // it even for an already-configured provider. Pre-fill from the
+                // credential store (`sofia-auth.json`) — the only place the key
+                // is persisted; `providers.json` never holds it.
+                let existing_key = codex_model_provider_info::api_key_from_auth_file(
+                    &crate::chatwidget::connect_provider_popup::provider_env_key(&provider_id),
+                )
+                .unwrap_or_default();
                 self.chat_widget.prompt_for_provider_api_key(
                     provider_id,
                     provider_name,
@@ -795,7 +794,6 @@ impl App {
                 config.providers.insert(
                     provider_id.clone(),
                     crate::chatwidget::connect_provider_popup::ProviderConfig {
-                        api_key: api_key.clone(),
                         base_url: base_url.clone(),
                         wire_api: wire_api.clone(),
                         name: provider_name.clone(),
@@ -813,7 +811,8 @@ impl App {
                 // Also write the key to sofia-auth.json so the engine can actually
                 // resolve it at request time (ModelProviderInfo::api_key reads
                 // from this file, never from providers.json).
-                let env_key_name = format!("{}_API_KEY", provider_id.to_uppercase().replace('-', "_"));
+                let env_key_name =
+                    crate::chatwidget::connect_provider_popup::provider_env_key(&provider_id);
                 if let Err(err) =
                     crate::chatwidget::connect_provider_popup::save_auth_key(&env_key_name, &api_key)
                 {
