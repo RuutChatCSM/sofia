@@ -416,7 +416,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app_test_support"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1658,7 +1658,7 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "byteorder-lite"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "core_test_support"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "env_home"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
 
@@ -3544,7 +3544,7 @@ dependencies = [
 
 [[package]]
 name = "extended"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
 
@@ -6546,7 +6546,7 @@ dependencies = [
 
 [[package]]
 name = "leb128fmt"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
@@ -6626,7 +6626,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linktime-proc-macro"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a44cd706ff0d503ee32b2071166510ca27e281228de10cd3aa8d35ff94560f81"
 
@@ -7090,7 +7090,7 @@ dependencies = [
 
 [[package]]
 name = "nibble_vec"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
 dependencies = [
@@ -8247,7 +8247,7 @@ checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
 
 [[package]]
 name = "pin-utils"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
@@ -9360,7 +9360,7 @@ dependencies = [
 
 [[package]]
 name = "ratatui-termina"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0bf912d9e66f057a759d92e386a280ea886b352ab757d6ac4d653c7ed2c43c2"
 dependencies = [
@@ -10045,7 +10045,7 @@ dependencies = [
 
 [[package]]
 name = "runfiles"
-version = "0.1.0"
+version = "0.1.1"
 source = "git+https://github.com/dzbarsky/rules_rust?rev=b56cbaa8465e74127f1ea216f813cd377295ad81#b56cbaa8465e74127f1ea216f813cd377295ad81"
 
 [[package]]
@@ -11103,7 +11103,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-agent-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "core_test_support",
@@ -11115,7 +11115,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-agent-graph-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -11130,7 +11130,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-agent-identity"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -11150,7 +11150,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-agent-roles"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "sofia-config",
@@ -11163,7 +11163,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-analytics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "os_info",
  "pretty_assertions",
@@ -11184,7 +11184,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-ansi-escape"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ansi-to-tui",
  "ratatui",
@@ -11193,7 +11193,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -11228,7 +11228,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "app_test_support",
@@ -11332,7 +11332,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "pretty_assertions",
@@ -11359,7 +11359,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server-daemon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -11382,7 +11382,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "inventory",
@@ -11416,11 +11416,11 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server-protocol-noop-macros"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "sofia-app-server-test-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -11442,7 +11442,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-app-server-transport"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -11484,7 +11484,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-apply-patch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -11504,7 +11504,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-arg0"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "dotenvy",
@@ -11526,7 +11526,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-async-utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "tokio",
@@ -11535,7 +11535,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-attachment-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "pretty_assertions",
@@ -11546,7 +11546,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-aws-auth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -11561,7 +11561,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-backend-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "http 1.4.0",
@@ -11581,7 +11581,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-backend-openapi-models"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -11590,7 +11590,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-build-info"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "semver",
@@ -11603,7 +11603,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-bwrap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
  "libc",
@@ -11612,7 +11612,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-chatgpt"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -11634,7 +11634,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "app_test_support",
@@ -11728,7 +11728,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "eventsource-stream",
  "futures",
@@ -11741,7 +11741,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-cloud-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -11766,7 +11766,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-cloud-tasks"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11799,7 +11799,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-cloud-tasks-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11814,7 +11814,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-cloud-tasks-mock-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "diffy",
@@ -11823,7 +11823,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-code-mode"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "http-body-util",
@@ -11846,7 +11846,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-code-mode-host"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -11874,7 +11874,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-code-mode-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glob",
  "pretty_assertions",
@@ -11892,7 +11892,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-code-mode-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "deno_core_icudata",
@@ -11910,11 +11910,11 @@ dependencies = [
 
 [[package]]
 name = "sofia-collaboration-mode-templates"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "sofia-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -11963,7 +11963,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-config-schema"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -11972,7 +11972,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-connectors"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -11994,7 +11994,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-connectors-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "sofia-connectors",
@@ -12008,7 +12008,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-context-fragments"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "sofia-protocol",
@@ -12017,7 +12017,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -12152,7 +12152,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-core-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sofia-analytics",
  "sofia-app-server-protocol",
@@ -12175,7 +12175,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-core-plugins"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12230,7 +12230,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-diagnostics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "pretty_assertions",
@@ -12238,7 +12238,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-exec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -12289,7 +12289,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-exec-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -12349,7 +12349,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-exec-server-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "pretty_assertions",
@@ -12364,7 +12364,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-exec-server-test-support"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -12379,7 +12379,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-execpolicy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -12397,7 +12397,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-experimental-api-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -12406,7 +12406,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-extension-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde_json",
@@ -12424,7 +12424,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-extension-items"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "schemars 0.8.22",
@@ -12436,7 +12436,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-external-agent-migration"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "pretty_assertions",
@@ -12466,7 +12466,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-features"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "schemars 0.8.22",
@@ -12479,7 +12479,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-feedback"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -12501,7 +12501,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-file-search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -12517,7 +12517,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-file-system"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "futures",
@@ -12529,7 +12529,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-file-watcher"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "notify",
  "pretty_assertions",
@@ -12540,7 +12540,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-git-attribution"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "sofia-backend-client",
@@ -12553,7 +12553,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-git-utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12579,7 +12579,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-goal-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12603,7 +12603,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-guardian-context"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde_json",
@@ -12614,7 +12614,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-guardian-v2"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "core_test_support",
@@ -12642,7 +12642,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-history"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "pretty_assertions",
@@ -12654,7 +12654,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-history-notes-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "core_test_support",
  "http 1.4.0",
@@ -12679,7 +12679,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-home"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "sofia-extension-api",
@@ -12690,7 +12690,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-hooks"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -12716,7 +12716,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-http-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "futures",
@@ -12748,7 +12748,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-image-generation-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "http 1.4.0",
@@ -12775,7 +12775,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-install-context"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "semver",
@@ -12788,7 +12788,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-keyring-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "keyring",
  "tracing",
@@ -12796,7 +12796,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-linux-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "globset",
@@ -12823,7 +12823,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-lmstudio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "sofia-core",
@@ -12837,7 +12837,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-login"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -12880,7 +12880,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -12920,7 +12920,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-mcp-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -12951,7 +12951,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-memories-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "schemars 0.8.22",
@@ -12972,7 +12972,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-memories-read"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "sofia-protocol",
@@ -12982,7 +12982,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-memories-write"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13019,7 +13019,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-message-history"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "memchr",
  "pretty_assertions",
@@ -13033,7 +13033,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-model-provider"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "http 1.4.0",
  "pretty_assertions",
@@ -13057,7 +13057,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-model-provider-info"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "http 1.4.0",
  "maplit",
@@ -13076,7 +13076,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-models-manager"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "pretty_assertions",
@@ -13095,7 +13095,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-mxc-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "appcontainer_common",
@@ -13107,7 +13107,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-network-proxy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -13146,7 +13146,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-ollama"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_matches",
  "async-stream",
@@ -13166,7 +13166,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-otel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "eventsource-stream",
@@ -13199,7 +13199,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-otel-trace-websocket"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -13210,7 +13210,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-plugin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde_json",
@@ -13224,7 +13224,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-process-hardening"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "pretty_assertions",
@@ -13232,7 +13232,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-prompts"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "pretty_assertions",
@@ -13246,7 +13246,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chardetng",
@@ -13290,7 +13290,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-queue-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "core_test_support",
@@ -13311,7 +13311,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-realtime-webrtc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "ctor 0.6.3",
@@ -13328,7 +13328,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-response-debug-context"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "http 1.4.0",
@@ -13339,7 +13339,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-responses-api-proxy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -13356,7 +13356,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-rmcp-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -13402,7 +13402,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-rollout"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13429,7 +13429,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-rollout-trace"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "http 1.4.0",
@@ -13445,7 +13445,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-sandboxing"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "dunce",
@@ -13471,7 +13471,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-secrets"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "age",
  "anyhow",
@@ -13492,7 +13492,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-shell-command"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -13515,7 +13515,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-shell-escalation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -13535,7 +13535,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-skills"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "include_dir",
  "pretty_assertions",
@@ -13552,7 +13552,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-skills-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_matches",
  "dirs",
@@ -13589,7 +13589,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-state"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13613,7 +13613,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-stdio-to-uds"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "pretty_assertions",
@@ -13625,7 +13625,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-terminal-detection"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "tracing",
@@ -13633,7 +13633,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-test-binary-support"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sofia-arg0",
  "tempfile",
@@ -13641,7 +13641,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-thread-manager-sample"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -13652,7 +13652,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-thread-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "futures",
@@ -13682,7 +13682,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bitflags 2.13.1",
  "jsonptr",
@@ -13707,7 +13707,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "app_test_support",
@@ -13825,7 +13825,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-uds"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-io",
  "pretty_assertions",
@@ -13838,7 +13838,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-user-verification"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "p256",
@@ -13849,7 +13849,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-absolute-path"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dirs",
  "dunce",
@@ -13863,14 +13863,14 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-approval-presets"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sofia-protocol",
 ]
 
 [[package]]
 name = "sofia-utils-audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "pretty_assertions",
@@ -13884,7 +13884,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-cache"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lru",
  "sha1 0.10.6",
@@ -13893,7 +13893,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-cargo-bin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "runfiles",
@@ -13902,7 +13902,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "pretty_assertions",
@@ -13914,15 +13914,15 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-elapsed"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "sofia-utils-fuzzy-match"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "sofia-utils-git-discovery"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "pretty_assertions",
@@ -13935,7 +13935,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-home-dir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dirs",
  "pretty_assertions",
@@ -13945,7 +13945,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-image"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "divan",
@@ -13958,7 +13958,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-json-to-toml"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde_json",
@@ -13967,7 +13967,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-oss"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sofia-core",
  "sofia-lmstudio",
@@ -13977,7 +13977,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-output-truncation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "sofia-protocol",
@@ -13986,7 +13986,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-path"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dunce",
  "pretty_assertions",
@@ -13997,7 +13997,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-path-uri"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "pretty_assertions",
@@ -14013,7 +14013,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-plugins"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -14027,7 +14027,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-pty"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "filedescriptor",
@@ -14043,7 +14043,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-readiness"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_matches",
  "thiserror 2.0.18",
@@ -14053,7 +14053,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-redacted-string"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -14061,14 +14061,14 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-rustls-provider"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rustls",
 ]
 
 [[package]]
 name = "sofia-utils-sandbox-summary"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "sofia-protocol",
@@ -14077,7 +14077,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-sleep-inhibitor"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "core-foundation 0.9.4",
  "libc",
@@ -14087,14 +14087,14 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-stream-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
 ]
 
 [[package]]
 name = "sofia-utils-string"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "regex-lite",
@@ -14104,14 +14104,14 @@ dependencies = [
 
 [[package]]
 name = "sofia-utils-template"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
 ]
 
 [[package]]
 name = "sofia-v8-poc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "v8",
@@ -14119,7 +14119,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-voice-host"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cpal",
@@ -14146,7 +14146,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-web-search-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "http 1.4.0",
  "pretty_assertions",
@@ -14167,7 +14167,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-websocket-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "pretty_assertions",
@@ -14183,7 +14183,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-windows-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -14209,7 +14209,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-windows-sandbox-service"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -14226,7 +14226,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-workload-identity"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -14241,7 +14241,7 @@ dependencies = [
 
 [[package]]
 name = "sofia-worktree"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "dunce",
@@ -14709,7 +14709,7 @@ dependencies = [
 
 [[package]]
 name = "strong_hash"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0831334aea34390b6b6ec7af0a27f9ee6324ad3a69463e6b240d83d6b7bce9c9"
 dependencies = [
@@ -14719,7 +14719,7 @@ dependencies = [
 
 [[package]]
 name = "strong_hash_derive"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace6b48b7c4383a39bd3b966cca41bc999003aab9f690a2f355525c924296928"
 dependencies = [
@@ -16502,7 +16502,7 @@ dependencies = [
 
 [[package]]
 name = "wasite"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8dad83b4f25e74f184f64c43b150b91efe7647395b42289f38e50566d82855b"
 
@@ -16834,7 +16834,7 @@ dependencies = [
 
 [[package]]
 name = "wezterm-input-types"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7012add459f951456ec9d6c7e6fc340b1ce15d6fc9629f8c42853412c029e57e"
 dependencies = [
@@ -17105,7 +17105,7 @@ dependencies = [
 
 [[package]]
 name = "windows-strings"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cd9b125c486025df0eabcb585e62173c6c9eddcec5d117d3b6e8c30e2ee4d10"
 dependencies = [
@@ -17414,7 +17414,7 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "winsplit"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ab703352da6a72f35c39a533526393725640575bb211f61987a2748323ad956"
 
