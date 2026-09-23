@@ -464,8 +464,10 @@ package_target() { # target
     case "$base" in
       *.tar.gz|*.tar.zst|*.zip|*.dmg|*.zst) continue ;;
     esac
+    # Re-runs must overwrite previous outputs instead of prompting.
+    run rm -f "$archive_dir/${base}.tar.gz" "$archive_dir/${base}.zst"
     run tar -C "$archive_dir" -czf "$archive_dir/${base}.tar.gz" "$base"
-    run zstd -T0 -19 --rm "$archive_dir/$base"
+    run zstd -T0 -19 -f --rm "$archive_dir/$base"
   done
 }
 
