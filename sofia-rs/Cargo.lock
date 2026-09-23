@@ -1974,9 +1974,9 @@ checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
 name = "clatter"
-version = "2.2.0"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fed49fa357a85c377c0f920e86100f5326111b09ad69f6de684e324e3ad8097"
+checksum = "5b16a94521ffa1f8116782dfa8d0aef3c921c3b73f7072f9a5079899eec13b92"
 dependencies = [
  "aes-gcm",
  "arrayvec",
