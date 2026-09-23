@@ -169,6 +169,12 @@ bazel-argument-comment-lint:
 build-for-release:
     bazel build //sofia-rs/cli:release_binaries
 
+# Build, sign, notarize, package, and publish a release from this macOS host.
+# See scripts/release-local.sh --help for options.
+[no-cd]
+release-local *args:
+    {{ justfile_directory() }}/scripts/release-local.sh {args}
+
 # Regenerate the json schema for config.toml from the current config types.
 write-config-schema:
     cargo run -p sofia-config-schema --bin sofia-write-config-schema
