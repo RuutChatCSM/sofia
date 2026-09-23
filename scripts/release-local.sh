@@ -225,19 +225,18 @@ import pathlib
 import sys
 
 new, old = sys.argv[1], sys.argv[2]
-root = pathlib.Path.cwd()
-cargo_toml = root / "sofia-rs" / "Cargo.toml"
-lock = root / "sofia-rs" / "Cargo.lock"
+cargo_toml = pathlib.Path.cwd() / "sofia-rs" / "Cargo.toml"
 text = cargo_toml.read_text()
 marker = f'version = "{old}"'
 count = text.count("\n" + marker)
 if count != 1:
     raise SystemExit(f"expected exactly one workspace version line, found {count}")
 cargo_toml.write_text(text.replace("\n" + marker, f'\nversion = "{new}"', 1))
-lock_text = lock.read_text()
-lock.write_text(lock_text.replace(f'version = "{old}"', f'version = "{new}"'))
-print(f"updated Cargo.toml and Cargo.lock to {new}")
+print(f"updated Cargo.toml workspace version to {new}")
 PY
+    # Refresh only workspace members in Cargo.lock. A blind string replace would
+    # also rewrite third-party crates that happen to share the version.
+    run cargo update --workspace --manifest-path "${REPO_ROOT}/sofia-rs/Cargo.toml"
   else
     log "Version already $VERSION; no bump needed"
   fi
