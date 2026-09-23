@@ -1,0 +1,10 @@
+name = "sofia-releases"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Custom domain: Cloudflare creates the DNS record and certificate for
+# release.ruut.chat automatically (a zone route would require a proxied DNS
+# record to exist first).
+[[routes]]
+pattern = "release.ruut.chat"
+custom_domain = true

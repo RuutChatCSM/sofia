@@ -18,7 +18,7 @@ $PreferReleasesOpenAICom = if ([string]::IsNullOrWhiteSpace($env:SOFIA_INSTALLER
 } else {
     $env:SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM -match "^(?i:1|true|yes)$"
 }
-$ReleasesBaseUri = "https://eu2.contabostorage.com/d6ff6f46e86849a2b1c82f32a5c98ba9:ruutchat/sofia"
+$ReleasesBaseUri = "https://release.ruut.chat/sofia"
 $ReleasesMetadataTimeoutSec = 30
 $ReleasesAssetTimeoutSec = 300
 
