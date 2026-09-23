@@ -8,13 +8,15 @@
 # when GitHub-hosted runners are unavailable.
 #
 # Usage:
-#   scripts/release-local.sh --bump patch [options]
-#   scripts/release-local.sh --version 0.1.1 [options]
+#   scripts/release-local.sh --bump [patch|minor|major]   (default: patch)
+#   scripts/release-local.sh --version X.Y.Z
+#   scripts/release-local.sh X.Y.Z        # positional version
+#   scripts/release-local.sh minor        # positional bump
 #
 # Options:
 #   --version X.Y.Z        Explicit version to release (tag rust-vX.Y.Z).
-#   --bump patch|minor|major
-#                          Derive the next version from the current one.
+#   --bump [patch|minor|major]
+#                          Derive the next version (value optional, default patch).
 #   --target TARGET        Rust target (default: native macOS target).
 #                          Repeatable. Only *-apple-darwin targets are supported.
 #   --env-file PATH        File to source before running (default:
@@ -83,12 +85,17 @@ run() {
   fi
 }
 
-usage() { sed -n '2,60p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,72p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) VERSION="${2:?--version requires a value}"; shift 2 ;;
-    --bump) BUMP="${2:?--bump requires a value}"; shift 2 ;;
+    --version=*) VERSION="${1#*=}"; shift ;;
+    --bump)
+      # Value is optional; default to a patch bump.
+      if [[ "${2:-}" =~ ^(patch|minor|major)$ ]]; then BUMP="$2"; shift 2; else BUMP="patch"; shift; fi
+      ;;
+    --bump=*) BUMP="${1#*=}"; shift ;;
     --target) TARGETS+=("${2:?--target requires a value}"); shift 2 ;;
     --env-file) ENV_FILE="${2:?--env-file requires a value}"; shift 2 ;;
     --work-dir) WORK_DIR="${2:?--work-dir requires a value}"; shift 2 ;;
@@ -106,6 +113,9 @@ while [[ $# -gt 0 ]]; do
     --skip-s3) SKIP_S3=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
+    # Convenience positionals: `just release-local patch` or `... 0.2.0`.
+    patch|minor|major) BUMP="$1"; shift ;;
+    [0-9]*.[0-9]*.[0-9]*) VERSION="$1"; shift ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
 done
