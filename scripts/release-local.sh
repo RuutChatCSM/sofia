@@ -25,6 +25,7 @@
 #   --skip-commit          Do not commit or tag the version bump.
 #   --skip-push            Do not push the commit/tag.
 #   --skip-build           Reuse previously built binaries.
+#   --skip-strip           Do not archive symbols or strip the binaries.
 #   --skip-sign            Reuse previously signed binaries.
 #   --skip-notarize        Do not submit to Apple notarization.
 #   --skip-package         Do not rebuild package archives.
@@ -58,6 +59,7 @@ SKIP_BUMP=0
 SKIP_COMMIT=0
 SKIP_PUSH=0
 SKIP_BUILD=0
+SKIP_STRIP=0
 SKIP_SIGN=0
 SKIP_NOTARIZE=0
 SKIP_PACKAGE=0
@@ -95,6 +97,7 @@ while [[ $# -gt 0 ]]; do
     --skip-commit) SKIP_COMMIT=1; shift ;;
     --skip-push) SKIP_PUSH=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
+    --skip-strip) SKIP_STRIP=1; shift ;;
     --skip-sign) SKIP_SIGN=1; shift ;;
     --skip-notarize) SKIP_NOTARIZE=1; shift ;;
     --skip-package) SKIP_PACKAGE=1; shift ;;
@@ -373,6 +376,23 @@ build_binaries() { # target
 release_dir() { printf '%s/sofia-rs/target/%s/release' "$REPO_ROOT" "$1"; }
 signed_dir() { printf '%s/%s' "$WORK_DIR" "$1"; }
 
+# Archive the .dSYM bundles (kept locally under WORK_DIR, not shipped) and strip
+# the release binaries. The Cargo release profile keeps debug info
+# (`strip = false`) so symbols can be archived first; without this step the
+# binaries ship with ~5x debug info. Mirrors the CI release.
+strip_target() { # target
+  local target="$1"
+  local rd
+  rd="$(release_dir "$target")"
+  log "Archiving symbols and stripping binaries for $target"
+  run bash "${REPO_ROOT}/.github/scripts/archive-release-symbols-and-strip-binaries.sh" \
+    --target "$target" \
+    --artifact-name "$target" \
+    --release-dir "$rd" \
+    --archive-dir "${WORK_DIR}/symbols/${target}" \
+    --binaries "sofia sofia-code-mode-host sofia-responses-api-proxy sofia-app-server"
+}
+
 sign_target() { # target
   local target="$1"
   local rd out
@@ -524,6 +544,7 @@ log "Sofia local release: version=$VERSION tag=$TAG targets=${TARGETS[*]}"
 for target in "${TARGETS[@]}"; do
   rustup target list --installed | grep -qx "$target" || run rustup target add "$target"
   [[ "$SKIP_BUILD" == "1" ]] || build_binaries "$target"
+  [[ "$SKIP_STRIP" == "1" ]] || strip_target "$target"
   [[ "$SKIP_SIGN" == "1" ]] || sign_target "$target"
   [[ "$SKIP_PACKAGE" == "1" ]] || package_target "$target"
   [[ "$SKIP_DMG" == "1" ]] || build_dmg "$target"

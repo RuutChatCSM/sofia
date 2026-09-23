@@ -9,6 +9,8 @@ node_modules
 
 # build
 dist/
+dist-local/
+.release-work/
 bazel-*
 user.bazelrc
 build/
