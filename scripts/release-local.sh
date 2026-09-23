@@ -126,6 +126,12 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
+# The packaging helpers require this; `just` normally exports it.
+export SOFIA_REPO_ROOT="${SOFIA_REPO_ROOT:-$REPO_ROOT}"
+
+# Prefer an explicit repository; never let `gh` pick the upstream remote.
+REPOSITORY="${SOFIA_RELEASE_REPOSITORY:-}"
+
 [[ "$(uname -s)" == "Darwin" ]] || die "local macOS releases must run on macOS"
 
 if ((${#TARGETS[@]} == 0)); then
@@ -471,9 +477,14 @@ build_dmg() { # target
 
 resolve_repo() {
   if [[ -z "$REPOSITORY" ]]; then
-    REPOSITORY="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
+    REPOSITORY="${SOFIA_RELEASE_REPOSITORY:-}"
+  fi
+  if [[ -z "$REPOSITORY" ]]; then
+    REPOSITORY="$(git remote get-url origin 2>/dev/null \
+      | sed -E 's#(git@|https://)github\.com[:/]([^/]+/[^/.]+)(\.git)?#\2#')"
   fi
   [[ -n "$REPOSITORY" ]] || die "could not determine the GitHub repository (set SOFIA_RELEASE_REPOSITORY)"
+  log "GitHub repository: $REPOSITORY"
 }
 
 github_release() {
