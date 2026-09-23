@@ -150,9 +150,9 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
 
@@ -304,7 +304,7 @@ class InstallShTest(unittest.TestCase):
                     self.assertEqual(
                         requests,
                         [
-                            "https://releases.openai.com/sofia/channels/latest",
+                            "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
                             "https://api.github.com/repos/RuutChatCSM/sofia/releases/latest",
                             "https://github.com/RuutChatCSM/sofia/releases/download/"
                             f"rust-v{VERSION}/sofia-package_SHA256SUMS",
@@ -338,7 +338,7 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/release.json",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
@@ -369,11 +369,11 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package_SHA256SUMS",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -400,11 +400,11 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package_SHA256SUMS",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -436,13 +436,13 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package_SHA256SUMS",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("checksum did not match expected digest", result.stderr)
@@ -480,13 +480,13 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package_SHA256SUMS",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("retrying from GitHub Releases", result.stderr)
@@ -511,8 +511,8 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/sofia/channels/latest",
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://eu2.contabostorage.com/ruutchat/sofia/channels/latest",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
                     f"rust-v{VERSION}/sofia-package_SHA256SUMS",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
@@ -543,9 +543,9 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/release.json",
-                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/sofia-package_SHA256SUMS",
-                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{MISMATCH_VERSION}/release.json",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{MISMATCH_VERSION}/sofia-package_SHA256SUMS",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{MISMATCH_VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn(
@@ -573,7 +573,7 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 first_requests,
                 [
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/release.json",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
                     "https://github.com/RuutChatCSM/sofia/releases/download/"
@@ -595,7 +595,7 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 second_requests,
                 [
-                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    f"https://eu2.contabostorage.com/ruutchat/sofia/releases/{VERSION}/release.json",
                     "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
@@ -668,13 +668,13 @@ def run_installer_in(
                 fi
                 printf '%s\n' "$SOFIA_TEST_METADATA_JSON"
                 ;;
-              https://releases.openai.com/sofia/channels/latest|https://releases.openai.com/sofia/releases/*/release.json)
+              https://eu2.contabostorage.com/ruutchat/sofia/channels/latest|https://eu2.contabostorage.com/ruutchat/sofia/releases/*/release.json)
                 if [ "$SOFIA_TEST_RELEASES_MODE" = "channel_failure" ]; then
                   exit 22
                 fi
                 printf '%s\n' "$SOFIA_TEST_RELEASES_METADATA_JSON"
                 ;;
-              https://releases.openai.com/sofia/releases/*/sofia-package_SHA256SUMS)
+              https://eu2.contabostorage.com/ruutchat/sofia/releases/*/sofia-package_SHA256SUMS)
                 if [ "$SOFIA_TEST_RELEASES_MODE" = "asset_fallback" ]; then
                   exit 22
                 fi
@@ -689,7 +689,7 @@ def run_installer_in(
                   exit 22
                 fi
                 ;;
-              https://releases.openai.com/sofia/releases/*/sofia-package-*.tar.gz)
+              https://eu2.contabostorage.com/ruutchat/sofia/releases/*/sofia-package-*.tar.gz)
                 if [ "$SOFIA_TEST_RELEASES_MODE" = "asset_fallback" ]; then
                   exit 22
                 fi

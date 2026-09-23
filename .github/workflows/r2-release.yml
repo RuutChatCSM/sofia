@@ -39,6 +39,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SOFIA_R2_SECRET_ACCESS_KEY }}
           AWS_ENDPOINT_URL: ${{ vars.SOFIA_R2_ENDPOINT_URL }}
           AWS_REGION: ${{ vars.SOFIA_R2_REGION }}
+          SOFIA_R2_BUCKET: ${{ vars.SOFIA_R2_BUCKET }}
+          SOFIA_R2_PUBLIC_BASE_URL: ${{ vars.SOFIA_R2_PUBLIC_BASE_URL }}
+          SOFIA_RELEASE_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_MAKE_LATEST: ${{ inputs.make_latest }}

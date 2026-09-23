@@ -18,7 +18,7 @@ $PreferReleasesOpenAICom = if ([string]::IsNullOrWhiteSpace($env:SOFIA_INSTALLER
 } else {
     $env:SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM -match "^(?i:1|true|yes)$"
 }
-$ReleasesBaseUri = "https://releases.openai.com/sofia"
+$ReleasesBaseUri = "https://eu2.contabostorage.com/ruutchat/sofia"
 $ReleasesMetadataTimeoutSec = 30
 $ReleasesAssetTimeoutSec = 300
 
@@ -394,7 +394,7 @@ function Resolve-Release {
         if ($null -ne $release) {
             return $release
         }
-        Write-WarningStep "releases.openai.com is unavailable; falling back to GitHub Releases."
+        Write-WarningStep "releases mirror is unavailable; falling back to GitHub Releases."
     }
 
     return Resolve-ReleaseFromGitHub -NormalizedVersion $normalizedVersion

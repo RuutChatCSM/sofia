@@ -6,7 +6,7 @@ RELEASE="${SOFIA_RELEASE:-latest}"
 NON_INTERACTIVE="${CODEX_NON_INTERACTIVE:-false}"
 DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
 PREFER_RELEASES_OPENAI_COM="${SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
-RELEASES_BASE_URL="https://releases.openai.com/sofia"
+RELEASES_BASE_URL="https://eu2.contabostorage.com/ruutchat/sofia"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
 RELEASES_ASSET_TIMEOUT=300
@@ -387,7 +387,7 @@ resolve_release_from_releases() {
     return 1
   fi
 
-  if ! parse_downloaded_release_metadata "$requested_release" "releases.openai.com"; then
+  if ! parse_downloaded_release_metadata "$requested_release" "releases mirror"; then
     return 1
   fi
   if ! resolve_metadata_version; then
@@ -398,7 +398,7 @@ resolve_release_from_releases() {
     return 1
   fi
   resolved_version="$metadata_version"
-  release_source="releases.openai.com"
+  release_source="releases mirror"
 }
 
 resolve_release() {
@@ -411,7 +411,7 @@ resolve_release() {
         select_release_assets; then
         return
       fi
-      warn "releases.openai.com is unavailable; falling back to GitHub Releases."
+      warn "releases mirror is unavailable; falling back to GitHub Releases."
       ;;
   esac
 
@@ -479,7 +479,7 @@ select_release_assets() {
     return 1
   fi
 
-  if [ "$release_source" = "releases.openai.com" ]; then
+  if [ "$release_source" = "releases mirror" ]; then
     download_url="$(releases_url_for_asset "$asset" "$resolved_version")"
     download_fallback_url="$(release_url_for_asset "$asset" "$resolved_version")"
     if [ "$install_layout" = "package" ]; then

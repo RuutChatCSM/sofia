@@ -108,25 +108,25 @@ jobs:
             binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
           # Release artifacts intentionally ship MUSL-linked Linux binaries.
-          - runner: ${{ github.event.repository.name }}-linux-x64-xl
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             bundle: primary
             artifact_name: x86_64-unknown-linux-musl
             binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy bwrap"
             build_dmg: "false"
-          - runner: ${{ github.event.repository.name }}-linux-x64-xl
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             bundle: app-server
             artifact_name: x86_64-unknown-linux-musl-app-server
             binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
-          - runner: ${{ github.event.repository.name }}-linux-arm64
+          - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             bundle: primary
             artifact_name: aarch64-unknown-linux-musl
             binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy bwrap"
             build_dmg: "false"
-          - runner: ${{ github.event.repository.name }}-linux-arm64
+          - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             bundle: app-server
             artifact_name: aarch64-unknown-linux-musl-app-server
@@ -1494,11 +1494,15 @@ jobs:
   # npm docs: https://docs.npmjs.com/trusted-publishers
   publish-npm:
     # Publish to npm for stable releases, numbered alphas, and alpha hotfixes.
+    # Also requires the SOFIA_PUBLISH_NPM repository variable to be set to
+    # 'true'; leave it unset to ship binary releases without touching npm
+    # (trusted publishing is not configured for the @ruut scope yet).
     if: >-
       ${{
         !cancelled() &&
         needs.release.result == 'success' &&
-        needs.release.outputs.should_publish_npm == 'true'
+        needs.release.outputs.should_publish_npm == 'true' &&
+        vars.SOFIA_PUBLISH_NPM == 'true'
       }}
     name: publish-npm
     needs: release
@@ -1514,7 +1518,7 @@ jobs:
           # Node 24 bundles npm >= 11.5.1, which trusted publishing requires.
           node-version: 24
           registry-url: "https://registry.npmjs.org"
-          scope: "@openai"
+          scope: "@ruut"
 
       - name: Download npm tarballs from release
         env:

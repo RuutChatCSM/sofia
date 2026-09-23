@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Mirror a Sofia GitHub Release to Cloudflare R2.
+"""Mirror a Sofia GitHub Release to an S3-compatible object store.
 
-Cloudflare R2 exposes an S3-compatible API, so the built-in AWS CLI uses
-standard AWS credentials and the R2 endpoint from ``AWS_ENDPOINT_URL``.
+The target store (Cloudflare R2, Contabo, etc.) exposes an S3-compatible API,
+so the built-in AWS CLI uses standard AWS credentials and the endpoint from
+``AWS_ENDPOINT_URL``. The bucket, public download base URL, and source GitHub
+repository are configurable through ``SOFIA_R2_BUCKET``,
+``SOFIA_R2_PUBLIC_BASE_URL``, and ``SOFIA_RELEASE_REPOSITORY`` respectively.
 Objects are created under ``sofia/releases/<version>/`` with a validated upload
 checksum and checked using object metadata before the run succeeds. The
 versioned prefix includes every release asset plus installer-facing
@@ -26,9 +29,12 @@ from pathlib import Path
 from typing import Any, NamedTuple, NoReturn
 from urllib.parse import quote
 
-BUCKET = "releases"
+BUCKET = os.environ.get("SOFIA_R2_BUCKET", "releases")
 PREFIX = "sofia"
-REPOSITORY = "openai/codex"
+REPOSITORY = os.environ.get("SOFIA_RELEASE_REPOSITORY", "openai/codex")
+PUBLIC_BASE_URL = os.environ.get(
+    "SOFIA_R2_PUBLIC_BASE_URL", f"https://releases.openai.com/{PREFIX}"
+)
 RELEASE_METADATA_NAME = "release.json"
 INSTALLER_NAMES = ("install.sh", "install.ps1")
 MAX_UPLOAD_WORKERS = 8
@@ -38,7 +44,6 @@ VERSION_RE = re.compile(
     r"^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha(?:\.[0-9]+){0,2}"
     r"|beta(?:\.[0-9]+)?))?$"
 )
-CRC64_RE = re.compile(r"^[A-Za-z0-9+/]{11}=$")
 SHA256_RE = re.compile(r"^sha256:([0-9a-f]{64})$")
 MISSING_OBJECT_RE = re.compile(r"\((?:404|NoSuchKey|NotFound)\)")
 
@@ -203,8 +208,6 @@ def put_object(
                 str(path),
                 f"s3://{BUCKET}/{key}",
                 *extra_args,
-                "--checksum-algorithm",
-                "CRC64NVME",
                 "--metadata",
                 f"sha256={sha256}",
                 "--endpoint-url",
@@ -234,8 +237,6 @@ def verify_remote(
                     BUCKET,
                     "--key",
                     key,
-                    "--checksum-mode",
-                    "ENABLED",
                     "--endpoint-url",
                     endpoint,
                 ]
@@ -250,18 +251,11 @@ def verify_remote(
 
     metadata = response.get("Metadata") if isinstance(response, dict) else None
     size = response.get("ContentLength") if isinstance(response, dict) else None
-    crc64 = response.get("ChecksumCRC64NVME") if isinstance(response, dict) else None
     sha256 = metadata.get("sha256") if isinstance(metadata, dict) else None
-    if (
-        size != expected_size
-        or sha256 != expected_sha256
-        or not isinstance(crc64, str)
-        or not CRC64_RE.fullmatch(crc64)
-    ):
+    if size != expected_size or sha256 != expected_sha256:
         raise PublishError(
             f"object metadata mismatch for {key}: expected size={expected_size} "
-            f"sha256={expected_sha256}, got size={size} sha256={sha256} "
-            f"crc64nvme={crc64}"
+            f"sha256={expected_sha256}, got size={size} sha256={sha256}"
         )
 
 
@@ -290,7 +284,7 @@ def publish_asset(
 ) -> dict[str, Any]:
     validate_asset(asset)
     key = f"{PREFIX}/releases/{version}/{asset.path.name}"
-    put_object(endpoint, key, asset.path, asset.sha256, extra_args=["--no-overwrite"])
+    put_object(endpoint, key, asset.path, asset.sha256, extra_args=[])
     if verify:
         verify_remote(endpoint, key, asset.size, asset.sha256)
     status = "published and verified" if verify else "published"
@@ -436,7 +430,7 @@ def main() -> int:
                     "name": asset.path.name,
                     "digest": f"sha256:{asset.sha256}",
                     "browser_download_url": (
-                        f"https://releases.openai.com/{PREFIX}/releases/"
+                        f"{PUBLIC_BASE_URL}/releases/"
                         f"{version}/{quote(asset.path.name, safe='')}"
                     ),
                 }
@@ -463,7 +457,7 @@ def main() -> int:
                 metadata_key,
                 metadata_path,
                 metadata_sha256,
-                extra_args=["--no-overwrite"],
+                extra_args=[],
             )
             verify_remote(
                 endpoint,
