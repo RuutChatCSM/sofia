@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,8 @@ PREFIX = "sofia"
 INSTALLER_NAMES = ("install.sh", "install.ps1")
 RELEASE_METADATA_NAME = "release.json"
 MAX_WORKERS = 3
+# S3-compatible mirrors occasionally reset large uploads; retry per asset.
+UPLOAD_ATTEMPTS = 5
 
 
 class PublishError(RuntimeError):
@@ -107,20 +110,34 @@ def upload_if_needed(
     bucket: str, endpoint: str, key: str, path: Path, content_type: str
 ) -> dict[str, Any]:
     sha256 = sha256_file(path)
-    existing = head_object(bucket, endpoint, key)
-    if (
-        existing is not None
-        and existing.get("ContentLength") == path.stat().st_size
-        and (existing.get("Metadata") or {}).get("sha256") == sha256
-    ):
-        print(f"up-to-date s3://{bucket}/{key}", file=sys.stderr)
-    else:
-        put_object(bucket, endpoint, key, path, sha256, content_type)
-        print(
-            f"uploaded s3://{bucket}/{key} size={path.stat().st_size} sha256={sha256}",
-            file=sys.stderr,
-        )
-    return {"name": path.name, "sha256": sha256, "size": path.stat().st_size}
+    size = path.stat().st_size
+    last_error: PublishError | None = None
+    for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+        try:
+            existing = head_object(bucket, endpoint, key)
+            if (
+                existing is not None
+                and existing.get("ContentLength") == size
+                and (existing.get("Metadata") or {}).get("sha256") == sha256
+            ):
+                print(f"up-to-date s3://{bucket}/{key}", file=sys.stderr)
+            else:
+                put_object(bucket, endpoint, key, path, sha256, content_type)
+                print(
+                    f"uploaded s3://{bucket}/{key} size={size} sha256={sha256}",
+                    file=sys.stderr,
+                )
+            return {"name": path.name, "sha256": sha256, "size": size}
+        except PublishError as error:
+            last_error = error
+            if attempt < UPLOAD_ATTEMPTS:
+                delay = 2 * attempt
+                print(
+                    f"retry {attempt}/{UPLOAD_ATTEMPTS} for s3://{bucket}/{key} in {delay}s: {error}",
+                    file=sys.stderr,
+                )
+                time.sleep(delay)
+    raise last_error if last_error else PublishError(f"upload failed for {key}")
 
 
 def parse_args() -> argparse.Namespace:
