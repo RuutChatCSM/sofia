@@ -34,9 +34,13 @@ class PublishError(RuntimeError):
 
 
 def run(args: list[str]) -> str:
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     if result.returncode != 0:
-        raise PublishError((result.stderr or result.stdout or "").strip() or f"{args[0]} failed")
+        raise PublishError(
+            (result.stderr or result.stdout or "").strip() or f"{args[0]} failed"
+        )
     return result.stdout
 
 
@@ -52,12 +56,21 @@ def s3_uri(bucket: str, key: str) -> str:
     return f"s3://{bucket}/{key}"
 
 
-def put_object(bucket: str, endpoint: str, key: str, path: Path, sha256: str, content_type: str) -> None:
+def put_object(
+    bucket: str, endpoint: str, key: str, path: Path, sha256: str, content_type: str
+) -> None:
     args = [
-        "aws", "s3", "cp", str(path), s3_uri(bucket, key),
-        "--metadata", f"sha256={sha256}",
-        "--content-type", content_type,
-        "--endpoint-url", endpoint,
+        "aws",
+        "s3",
+        "cp",
+        str(path),
+        s3_uri(bucket, key),
+        "--metadata",
+        f"sha256={sha256}",
+        "--content-type",
+        content_type,
+        "--endpoint-url",
+        endpoint,
     ]
     run(args)
 
@@ -65,20 +78,34 @@ def put_object(bucket: str, endpoint: str, key: str, path: Path, sha256: str, co
 def head_object(bucket: str, endpoint: str, key: str) -> dict[str, Any] | None:
     result = subprocess.run(
         [
-            "aws", "s3api", "head-object",
-            "--bucket", bucket, "--key", key,
-            "--endpoint-url", endpoint,
+            "aws",
+            "s3api",
+            "head-object",
+            "--bucket",
+            bucket,
+            "--key",
+            key,
+            "--endpoint-url",
+            endpoint,
         ],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     if result.returncode != 0:
-        if "404" in result.stderr or "Not Found" in result.stderr or "NoSuchKey" in result.stderr:
+        if (
+            "404" in result.stderr
+            or "Not Found" in result.stderr
+            or "NoSuchKey" in result.stderr
+        ):
             return None
         raise PublishError((result.stderr or result.stdout or "").strip())
     return json.loads(result.stdout)
 
 
-def upload_if_needed(bucket: str, endpoint: str, key: str, path: Path, content_type: str) -> dict[str, Any]:
+def upload_if_needed(
+    bucket: str, endpoint: str, key: str, path: Path, content_type: str
+) -> dict[str, Any]:
     sha256 = sha256_file(path)
     existing = head_object(bucket, endpoint, key)
     if (
@@ -89,7 +116,10 @@ def upload_if_needed(bucket: str, endpoint: str, key: str, path: Path, content_t
         print(f"up-to-date s3://{bucket}/{key}", file=sys.stderr)
     else:
         put_object(bucket, endpoint, key, path, sha256, content_type)
-        print(f"uploaded s3://{bucket}/{key} size={path.stat().st_size} sha256={sha256}", file=sys.stderr)
+        print(
+            f"uploaded s3://{bucket}/{key} size={path.stat().st_size} sha256={sha256}",
+            file=sys.stderr,
+        )
     return {"name": path.name, "sha256": sha256, "size": path.stat().st_size}
 
 
@@ -156,20 +186,26 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as temp_dir:
             metadata_path = Path(temp_dir) / RELEASE_METADATA_NAME
             metadata_path.write_text(
-                json.dumps({"assets": metadata_assets, "tag_name": args.tag}, indent=2) + "\n",
+                json.dumps({"assets": metadata_assets, "tag_name": args.tag}, indent=2)
+                + "\n",
                 encoding="utf-8",
             )
             upload_if_needed(
-                bucket, endpoint,
+                bucket,
+                endpoint,
                 f"{PREFIX}/releases/{version}/{RELEASE_METADATA_NAME}",
-                metadata_path, "application/json",
+                metadata_path,
+                "application/json",
             )
 
             for name in INSTALLER_NAMES:
                 installer = dist / name
                 if installer.is_file():
                     upload_if_needed(
-                        bucket, endpoint, f"{PREFIX}/{name}", installer,
+                        bucket,
+                        endpoint,
+                        f"{PREFIX}/{name}",
+                        installer,
                         "text/plain; charset=utf-8",
                     )
 
@@ -180,11 +216,19 @@ def main() -> int:
                 channels.append("prerelease")
             for channel in channels:
                 upload_if_needed(
-                    bucket, endpoint, f"{PREFIX}/channels/{channel}",
-                    metadata_path, "application/json",
+                    bucket,
+                    endpoint,
+                    f"{PREFIX}/channels/{channel}",
+                    metadata_path,
+                    "application/json",
                 )
 
-        print(json.dumps({"assetCount": len(assets), "tag": args.tag, "version": version}, sort_keys=True))
+        print(
+            json.dumps(
+                {"assetCount": len(assets), "tag": args.tag, "version": version},
+                sort_keys=True,
+            )
+        )
         return 0
     except PublishError as error:
         print(f"publish failed: {error}", file=sys.stderr)

@@ -9,7 +9,8 @@ const ANNOUNCEMENT_TIP_URL: &str =
 const IS_MACOS: bool = cfg!(target_os = "macos");
 const IS_WINDOWS: bool = cfg!(target_os = "windows");
 
-const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'sofia app' or visit https://github.com/RuutChatCSM/sofia";
+const APP_TOOLTIP: &str =
+    "Try the **Desktop app**. Run 'sofia app' or visit https://github.com/RuutChatCSM/sofia";
 const MACOS_APP_TOOLTIP: &str =
     "Run `sofia app` to open the Desktop app (it installs on macOS if needed).";
 const LINUX_APP_TOOLTIP: &str = "Try the **Desktop app** on Linux: install it from https://learn.chatgpt.com/docs/linux/linux-app and run 'chatgpt'.";
