@@ -539,6 +539,8 @@ publish_s3() {
   [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]] \
     || die "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for S3 publishing"
   log "Publishing $TAG to s3://${SOFIA_R2_BUCKET:-<unset>}"
+  export AWS_RETRY_MODE="${AWS_RETRY_MODE:-adaptive}"
+  export AWS_MAX_ATTEMPTS="${AWS_MAX_ATTEMPTS:-10}"
   run "$PYTHON" "${REPO_ROOT}/scripts/publish_local_s3.py" \
     --dist-dir "$DIST_DIR_ABS" \
     --tag "$TAG" --make-latest true --prerelease false

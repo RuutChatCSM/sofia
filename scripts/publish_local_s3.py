@@ -26,7 +26,7 @@ from urllib.parse import quote
 PREFIX = "sofia"
 INSTALLER_NAMES = ("install.sh", "install.ps1")
 RELEASE_METADATA_NAME = "release.json"
-MAX_WORKERS = 6
+MAX_WORKERS = 3
 
 
 class PublishError(RuntimeError):
