@@ -1960,3 +1960,57 @@ fn chat_completions_reasoning_content_repair_echoes_field_on_tool_calls() {
         "the repair must be idempotent"
     );
 }
+
+#[test]
+fn chat_completions_body_echoes_reasoning_on_narration_without_reasoning_item() {
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "assistant".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: "I will inspect the project.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    assert_eq!(
+        body["messages"][1],
+        serde_json::json!({
+            "role": "assistant",
+            "content": "I will inspect the project.",
+            "reasoning_content": "",
+        })
+    );
+}
+
+#[test]
+fn chat_completions_reasoning_repair_preserves_text_and_existing_reasoning() {
+    let mut body = serde_json::json!({"messages": [
+        {"role": "user", "content": "Inspect the project"},
+        {"role": "assistant", "content": "I will inspect the project."},
+        {"role": "assistant", "content": "", "reasoning_content": null,
+         "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "Files found"},
+        {"role": "assistant", "content": "Done", "reasoning_content": "Original reasoning"}
+    ]});
+    let expected = serde_json::json!({"messages": [
+        {"role": "user", "content": "Inspect the project"},
+        {"role": "assistant", "content": "I will inspect the project.", "reasoning_content": ""},
+        {"role": "assistant", "content": "", "reasoning_content": "",
+         "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "Files found"},
+        {"role": "assistant", "content": "Done", "reasoning_content": "Original reasoning"}
+    ]});
+    assert!(crate::client::repair_chat_completions_reasoning_content(
+        &mut body
+    ));
+    assert_eq!(body, expected);
+    assert!(!crate::client::repair_chat_completions_reasoning_content(
+        &mut body
+    ));
+    assert_eq!(body, expected);
+}

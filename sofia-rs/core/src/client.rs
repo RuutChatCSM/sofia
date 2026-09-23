@@ -2440,24 +2440,26 @@ impl ModelClientSession {
                                     .or_else(|| delta.get("reasoning"))
                                     .and_then(|r| r.as_str())
                                 {
+                                    // Even an empty field declares thinking mode. Keep
+                                    // a reasoning item so later tool requests echo it.
+                                    if !reasoning_started {
+                                        reasoning_started = true;
+                                        let rid = ResponseItemId::new("reasoning");
+                                        reasoning_item_id = Some(rid.clone());
+                                        let _ = tx
+                                            .send(Ok(ResponseEvent::OutputItemAdded(
+                                                ResponseItem::Reasoning {
+                                                    id: Some(rid),
+                                                    summary: vec![],
+                                                    content: Some(vec![]),
+                                                    encrypted_content: None,
+                                                    internal_chat_message_metadata_passthrough:
+                                                        None,
+                                                },
+                                            )))
+                                            .await;
+                                    }
                                     if !reasoning.is_empty() {
-                                        if !reasoning_started {
-                                            reasoning_started = true;
-                                            let rid = ResponseItemId::new("reasoning");
-                                            reasoning_item_id = Some(rid.clone());
-                                            let _ = tx
-                                                .send(Ok(ResponseEvent::OutputItemAdded(
-                                                    ResponseItem::Reasoning {
-                                                        id: Some(rid),
-                                                        summary: vec![],
-                                                        content: Some(vec![]),
-                                                        encrypted_content: None,
-                                                        internal_chat_message_metadata_passthrough:
-                                                            None,
-                                                    },
-                                                )))
-                                                .await;
-                                        }
                                         reasoning_text.push_str(reasoning);
                                         reasoning_delta_count += 1;
                                         let _ = tx
@@ -3382,8 +3384,8 @@ fn echoes_reasoning_content(
         && !matches!(effort, Some(ReasoningEffortConfig::None))
 }
 
-/// Echo `reasoning_content` back on every assistant message that carries tool
-/// calls. Returns `true` when the body was modified.
+/// Echo `reasoning_content` back on every assistant message, including narration
+/// emitted alongside tool calls. Returns `true` when the body was modified.
 ///
 /// Used to recover from a provider rejecting a request that omitted the field,
 /// e.g. after compaction dropped the reasoning item that preceded a tool call.
@@ -3396,13 +3398,10 @@ fn repair_chat_completions_reasoning_content(request_body: &mut serde_json::Valu
     };
     let mut repaired = false;
     for message in messages {
-        let carries_tool_calls = message
-            .get("tool_calls")
-            .and_then(|tool_calls| tool_calls.as_array())
-            .is_some_and(|tool_calls| !tool_calls.is_empty());
         if message["role"] == "assistant"
-            && carries_tool_calls
-            && message.get("reasoning_content").is_none()
+            && message
+                .get("reasoning_content")
+                .is_none_or(serde_json::Value::is_null)
         {
             message["reasoning_content"] = serde_json::json!("");
             repaired = true;
@@ -3550,7 +3549,7 @@ fn build_chat_completions_body(
                     // assistant message(s) of the turn that produced reasoning —
                     // including the text message, not just the tool-call one.
                     // Set it even when empty; DeepSeek echoes empty reasoning.
-                    if role == "assistant" && saw_reasoning {
+                    if role == "assistant" && echo_reasoning_content(saw_reasoning) {
                         message["reasoning_content"] = json!(pending_reasoning_content);
                     }
                     messages.push(message);

@@ -164,6 +164,8 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
             "choices": [{
                 "index": 0,
                 "delta": {
+                    "content": "I will inspect the project.",
+                    "reasoning_content": "",
                     "tool_calls": [{
                         "index": 0,
                         "type": "function",
@@ -192,7 +194,15 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
 
     Mock::given(method("POST"))
         .and(path("/v1/chat/completions"))
-        .respond_with(move |_request: &wiremock::Request| {
+        .respond_with(move |request: &wiremock::Request| {
+            let request_body: Value = serde_json::from_slice(&request.body).unwrap();
+            if request_body["messages"].as_array().unwrap().iter().any(|message| {
+                message["role"] == "assistant" && !message["reasoning_content"].is_string()
+            }) {
+                return ResponseTemplate::new(/*status*/ 400).set_body_json(json!({
+                    "error": {"message": "The `reasoning_content` in the thinking mode must be passed back to the API."}
+                }));
+            }
             let body = if response_count.fetch_add(1, Ordering::SeqCst) == 0 {
                 tool_response.clone()
             } else {
@@ -202,7 +212,7 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
                 .insert_header("content-type", "text/event-stream")
                 .set_body_string(body)
         })
-        .expect(/*requests*/ 2)
+        .expect(/*requests*/ 3)
         .mount(&server)
         .await;
 
@@ -262,13 +272,35 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
     .await;
 
     assert!(saw_final_text);
-    assert_eq!(request_count.load(Ordering::SeqCst), 2);
+    // Two conversation requests plus the native goal-judge request.
+    assert_eq!(request_count.load(Ordering::SeqCst), 3);
     server.verify().await;
 
-    let requests = server.received_requests().await.unwrap();
+    let requests = server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|request| request.method == "POST")
+        .collect::<Vec<_>>();
     let second_request: Value = serde_json::from_slice(&requests[1].body)?;
     let messages = second_request["messages"].as_array().unwrap();
     assert_eq!(messages.last().unwrap()["role"], "tool");
+    let assistant_messages = messages
+        .iter()
+        .filter(|message| message["role"] == "assistant")
+        .collect::<Vec<_>>();
+    assert_eq!(assistant_messages.len(), 2);
+    assert!(
+        assistant_messages
+            .iter()
+            .all(|message| message["reasoning_content"] == "")
+    );
+    assert!(
+        assistant_messages
+            .iter()
+            .any(|message| message["content"] == "I will inspect the project.")
+    );
 
     Ok(())
 }
