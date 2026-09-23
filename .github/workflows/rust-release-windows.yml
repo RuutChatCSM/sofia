@@ -184,6 +184,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # `secrets` cannot be referenced from an `if:` expression, so expose the
+    # presence check through job-level env instead.
+    env:
+      AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
     defaults:
       run:
         working-directory: sofia-rs
@@ -230,7 +234,7 @@ jobs:
           done
 
       - name: Sign Windows binaries with Azure Trusted Signing
-        if: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME != '' }}
+        if: ${{ env.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME != '' }}
         uses: ./.github/actions/windows-code-sign
         with:
           target: ${{ matrix.target }}

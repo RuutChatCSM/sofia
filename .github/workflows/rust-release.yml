@@ -60,7 +60,7 @@ jobs:
   build:
     needs: tag-check
     name: Build - ${{ matrix.runner }} - ${{ matrix.target }} - ${{ matrix.bundle }}
-    runs-on: ${{ matrix.runs_on || matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     # Release builds can take a long time, so leave some headroom to avoid
     # having to restart the full workflow due to a timeout.
     timeout-minutes: 90
@@ -1673,10 +1673,14 @@ jobs:
     environment:
       name: dev-website-vercel-deploy
       deployment: false
+    # `secrets` cannot be referenced from an `if:` expression, so expose the
+    # presence check through job-level env instead.
+    env:
+      DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
 
     steps:
       - name: Trigger developers.openai.com deploy
-        if: ${{ secrets.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL != '' }}
+        if: ${{ env.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL != '' }}
         continue-on-error: true
         env:
           DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
@@ -1705,10 +1709,14 @@ jobs:
     environment:
       name: mainline-release-winget
       deployment: false
+    # `secrets` cannot be referenced from an `if:` expression, so expose the
+    # presence check through job-level env instead.
+    env:
+      WINGET_PUBLISH_PAT: ${{ secrets.WINGET_PUBLISH_PAT }}
 
     steps:
       - name: Publish to WinGet
-        if: ${{ secrets.WINGET_PUBLISH_PAT != '' }}
+        if: ${{ env.WINGET_PUBLISH_PAT != '' }}
         uses: vedantmgoyal9/winget-releaser@7bd472be23763def6e16bd06cc8b1cdfab0e2fd5
         with:
           identifier: OpenAI.Sofia
