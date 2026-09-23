@@ -16,7 +16,7 @@ import {
 } from "./responsesProxy";
 import { createMockClient, createTestClient } from "./testCodex";
 
-describe("Codex", () => {
+describe("Sofia", () => {
   it("returns thread events", async () => {
     const { url, close } = await startResponsesTestProxy({
       statusCode: 200,
@@ -218,7 +218,7 @@ describe("Codex", () => {
       expectPair(commandArgs, ["--sandbox", "workspace-write"]);
       expectPair(commandArgs, ["--model", "gpt-test-1"]);
       expectPair(commandArgs, ["--thread-source", "automated_review"]);
-      const metadata = JSON.parse(payload!.headers["x-codex-turn-metadata"] as string) as {
+      const metadata = JSON.parse(payload!.headers["x-sofia-turn-metadata"] as string) as {
         thread_source?: string;
       };
       expect(metadata.thread_source).toBe("automated_review");
@@ -509,7 +509,7 @@ describe("Codex", () => {
     });
 
     // TODO(anp): Add the sandbox helper to the SDK workflow so this can use a deny-read override.
-    const writablePath = path.join(os.tmpdir(), "codex-sdk-config.env");
+    const writablePath = path.join(os.tmpdir(), "sofia-sdk-config.env");
     const permissionOverride = `permissions.sdk_test.filesystem={":root"="read",${JSON.stringify(writablePath)}="write"}`;
     const { args: spawnArgs, restore } = codexExecSpy();
     const { client, cleanup } = createTestClient({
@@ -615,7 +615,7 @@ describe("Codex", () => {
       const text = payload!.json.text;
       expect(text).toBeDefined();
       expect(text?.format).toEqual({
-        name: "codex_output_schema",
+        name: "sofia_output_schema",
         type: "json_schema",
         strict: true,
         schema,
@@ -679,7 +679,7 @@ describe("Codex", () => {
     });
 
     const { args: spawnArgs, restore } = codexExecSpy();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-images-"));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sofia-images-"));
     const imagesDirectoryEntries: [string, string] = [
       path.join(tempDir, "first.png"),
       path.join(tempDir, "second.jpg"),
@@ -726,7 +726,7 @@ describe("Codex", () => {
     });
 
     const { args: spawnArgs, restore } = codexExecSpy();
-    const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-working-dir-"));
+    const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "sofia-working-dir-"));
     const { client, cleanup } = createTestClient({
       baseUrl: url,
       apiKey: "test",
@@ -760,7 +760,7 @@ describe("Codex", () => {
         ),
       ],
     });
-    const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-working-dir-"));
+    const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "sofia-working-dir-"));
     const { client, cleanup } = createTestClient({
       baseUrl: url,
       apiKey: "test",
@@ -780,7 +780,7 @@ describe("Codex", () => {
     }
   });
 
-  it("sets the codex sdk originator header", async () => {
+  it("sets the sofia sdk originator header", async () => {
     const { url, close, requests } = await startResponsesTestProxy({
       statusCode: 200,
       responseBodies: [sse(responseStarted(), assistantMessage("Hi!"), responseCompleted())],
@@ -794,9 +794,9 @@ describe("Codex", () => {
       expect(requests.length).toBeGreaterThan(0);
       const originatorHeader = requests[0]!.headers["originator"];
       if (Array.isArray(originatorHeader)) {
-        expect(originatorHeader).toContain("codex_sdk_ts");
+        expect(originatorHeader).toContain("sofia_sdk_ts");
       } else {
-        expect(originatorHeader).toBe("codex_sdk_ts");
+        expect(originatorHeader).toBe("sofia_sdk_ts");
       }
     } finally {
       cleanup();
@@ -826,7 +826,7 @@ describe("Codex", () => {
 });
 
 /**
- * Given a list of args to `codex` and a `key`, collects all `--config`
+ * Given a list of args to `sofia` and a `key`, collects all `--config`
  * overrides for that key.
  */
 function collectConfigValues(args: string[] | undefined, key: string): string[] {

@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "code-mode-runtime",
+    crate_name = "sofia_code_mode_runtime",
+)

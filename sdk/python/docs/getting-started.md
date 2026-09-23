@@ -8,27 +8,27 @@ with a multi-turn thread.
 Install the SDK:
 
 ```bash
-pip install openai-codex
+pip install openai-sofia
 ```
 
 Requirements:
 
 - Python `>=3.10`
-- An existing Codex account session, or one of the login flows below
+- An existing Sofia account session, or one of the login flows below
 
-The SDK installs its matching `openai-codex-cli-bin` runtime dependency
-automatically. SDK release versions track the corresponding Codex CLI release.
+The SDK installs its matching `openai-sofia-cli-bin` runtime dependency
+automatically. SDK release versions track the corresponding Sofia CLI release.
 
 ## 2. Authenticate When Needed
 
-Existing Codex authentication is reused automatically. For ChatGPT browser
+Existing Sofia authentication is reused automatically. For ChatGPT browser
 login:
 
 ```python
-from openai_codex import Codex
+from openai_codex import Sofia
 
-with Codex() as codex:
-    login = codex.login_chatgpt()
+with Sofia() as sofia:
+    login = sofia.login_chatgpt()
     print(login.auth_url)
     print(login.wait().success)
 ```
@@ -36,8 +36,8 @@ with Codex() as codex:
 For device-code login:
 
 ```python
-with Codex() as codex:
-    login = codex.login_chatgpt_device_code()
+with Sofia() as sofia:
+    login = sofia.login_chatgpt_device_code()
     print(login.verification_url, login.user_code)
     print(login.wait().success)
 ```
@@ -45,18 +45,18 @@ with Codex() as codex:
 For API-key login:
 
 ```python
-with Codex() as codex:
-    codex.login_api_key("sk-...")
-    print(codex.account().account)
+with Sofia() as sofia:
+    sofia.login_api_key("sk-...")
+    print(sofia.account().account)
 ```
 
 ## 3. Run A Turn
 
 ```python
-from openai_codex import Codex, Sandbox
+from openai_codex import Sofia, Sandbox
 
-with Codex() as codex:
-    thread = codex.thread_start(sandbox=Sandbox.workspace_write)
+with Sofia() as sofia:
+    thread = sofia.thread_start(sandbox=Sandbox.workspace_write)
     result = thread.run("Say hello in one sentence.")
 
     print("Thread:", thread.id)
@@ -75,10 +75,10 @@ or interrupting an active turn.
 Use one enum for the initial thread and later turn overrides:
 
 ```python
-from openai_codex import Codex, Sandbox
+from openai_codex import Sofia, Sandbox
 
-with Codex() as codex:
-    thread = codex.thread_start(sandbox=Sandbox.workspace_write)
+with Sofia() as sofia:
+    thread = sofia.thread_start(sandbox=Sandbox.workspace_write)
     thread.run("Make the requested changes.")
     review = thread.run("Review the diff only.", sandbox=Sandbox.read_only)
 ```
@@ -90,16 +90,16 @@ Available presets:
   configured writable roots; this is the normal default for workspace work.
 - `Sandbox.full_access`: run without filesystem access restrictions.
 
-When `sandbox=` is omitted, Codex uses its configured default. A turn override
+When `sandbox=` is omitted, Sofia uses its configured default. A turn override
 also applies to subsequent turns on that thread.
 
 ## 5. Continue A Thread
 
 ```python
-from openai_codex import Codex
+from openai_codex import Sofia
 
-with Codex() as codex:
-    thread = codex.thread_start()
+with Sofia() as sofia:
+    thread = sofia.thread_start()
     thread.run("Summarize Rust ownership in two bullets.")
     result = thread.run("Now explain it to a Python developer.")
     print(result.final_response)
@@ -108,8 +108,8 @@ with Codex() as codex:
 To resume a stored thread later:
 
 ```python
-with Codex() as codex:
-    thread = codex.thread_resume("thr_123")
+with Sofia() as sofia:
+    thread = sofia.thread_resume("thr_123")
     print(thread.run("Continue where we left off.").final_response)
 ```
 
@@ -122,8 +122,8 @@ from openai_codex import AsyncCodex, Sandbox
 
 
 async def main() -> None:
-    async with AsyncCodex() as codex:
-        thread = await codex.thread_start(sandbox=Sandbox.workspace_write)
+    async with AsyncCodex() as sofia:
+        thread = await sofia.thread_start(sandbox=Sandbox.workspace_write)
         result = await thread.run("Continue where we left off.")
         print(result.final_response)
 
@@ -137,10 +137,10 @@ Python's built-in documentation tools cover the curated SDK surface:
 
 ```python
 import openai_codex
-from openai_codex import Codex, CodexConfig
+from openai_codex import Sofia, CodexConfig
 
 help(openai_codex)
-help(Codex)
+help(Sofia)
 help(CodexConfig)
 ```
 

@@ -44,7 +44,7 @@ def test_generated_v2_bundle_has_single_shared_plan_type_definition() -> None:
 
 
 def test_plan_type_accepts_business_prolite_from_newer_runtime() -> None:
-    """New runtime plan values should remain typed when using a codex_bin override."""
+    """New runtime plan values should remain typed when using a sofia_bin override."""
     plan_type = "self_serve_business_prolite"
     response = GetAccountResponse.model_validate(
         {

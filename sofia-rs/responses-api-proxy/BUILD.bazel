@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "responses-api-proxy",
+    crate_name = "sofia_responses_api_proxy",
+)

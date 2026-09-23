@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "apply-patch",
+    crate_name = "sofia_apply_patch",
+)

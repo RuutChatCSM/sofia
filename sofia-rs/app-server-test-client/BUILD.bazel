@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "app-server-test-client",
+    crate_name = "sofia_app_server_test_client",
+)

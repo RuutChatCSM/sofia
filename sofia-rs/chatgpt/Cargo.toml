@@ -1,0 +1,31 @@
+[package]
+name = "sofia-chatgpt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+sofia-connectors = { workspace = true }
+sofia-core = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-utils-cli = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+
+[dev-dependencies]
+sofia-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lib]
+doctest = false

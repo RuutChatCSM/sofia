@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Remote-env setup script for codex-rs integration tests.
+# Remote-env setup script for sofia-rs integration tests.
 #
 # Usage (source-only):
 #   source scripts/test-remote-env.sh
-#   cd codex-rs
-#   just test -p codex-core --test all remote_test_env_can_connect_and_use_filesystem
-#   codex_remote_env_cleanup
+#   cd sofia-rs
+#   just test -p sofia-core --test all remote_test_env_can_connect_and_use_filesystem
+#   sofia_remote_env_cleanup
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -17,15 +17,15 @@ is_sourced() {
 
 setup_remote_env() {
   local container_name
-  local codex_binary_path
+  local sofia_binary_path
   local container_ip
   local remote_codex_path
   local remote_exec_server_pid
   local remote_exec_server_port
   local remote_exec_server_stdout_path
 
-  container_name="${CODEX_TEST_REMOTE_ENV_CONTAINER_NAME:-codex-remote-test-env-local-$(date +%s)-${RANDOM}}"
-  codex_binary_path="${CARGO_TARGET_DIR:-${REPO_ROOT}/codex-rs/target}/debug/codex"
+  container_name="${SOFIA_TEST_REMOTE_ENV_CONTAINER_NAME:-sofia-remote-test-env-local-$(date +%s)-${RANDOM}}"
+  sofia_binary_path="${CARGO_TARGET_DIR:-${REPO_ROOT}/sofia-rs/target}/debug/sofia"
 
   if ! command -v docker >/dev/null 2>&1; then
     echo "docker is required (Colima or Docker Desktop)" >&2
@@ -38,17 +38,17 @@ setup_remote_env() {
   fi
 
   if ! command -v cargo >/dev/null 2>&1; then
-    echo "cargo is required to build codex" >&2
+    echo "cargo is required to build sofia" >&2
     return 1
   fi
 
   (
-    cd "${REPO_ROOT}/codex-rs"
-    cargo build -p codex-cli --bin codex
+    cd "${REPO_ROOT}/sofia-rs"
+    cargo build -p sofia-cli --bin sofia
   )
 
-  if [[ ! -f "${codex_binary_path}" ]]; then
-    echo "codex binary not found at ${codex_binary_path}" >&2
+  if [[ ! -f "${sofia_binary_path}" ]]; then
+    echo "sofia binary not found at ${sofia_binary_path}" >&2
     return 1
   fi
 
@@ -64,12 +64,12 @@ setup_remote_env() {
     return 1
   fi
 
-  if [[ -z "${CODEX_TEST_REMOTE_EXEC_SERVER_URL:-}" ]]; then
-    remote_codex_path="/tmp/codex-remote-env/codex"
+  if [[ -z "${SOFIA_TEST_REMOTE_EXEC_SERVER_URL:-}" ]]; then
+    remote_codex_path="/tmp/sofia-remote-env/sofia"
     remote_exec_server_port="31987"
-    remote_exec_server_stdout_path="/tmp/codex-remote-env/exec-server.stdout"
-    docker exec "${container_name}" sh -lc "mkdir -p /tmp/codex-remote-env"
-    docker cp "${codex_binary_path}" "${container_name}:${remote_codex_path}"
+    remote_exec_server_stdout_path="/tmp/sofia-remote-env/exec-server.stdout"
+    docker exec "${container_name}" sh -lc "mkdir -p /tmp/sofia-remote-env"
+    docker cp "${sofia_binary_path}" "${container_name}:${remote_codex_path}"
     docker exec "${container_name}" chmod +x "${remote_codex_path}"
     remote_exec_server_pid="$(
       docker exec "${container_name}" sh -lc \
@@ -84,13 +84,13 @@ setup_remote_env() {
       docker rm -f "${container_name}" >/dev/null 2>&1 || true
       return 1
     fi
-    export CODEX_TEST_REMOTE_EXEC_SERVER_PID="${remote_exec_server_pid}"
-    export CODEX_TEST_REMOTE_EXEC_SERVER_URL="ws://${container_ip}:${remote_exec_server_port}"
+    export SOFIA_TEST_REMOTE_EXEC_SERVER_PID="${remote_exec_server_pid}"
+    export SOFIA_TEST_REMOTE_EXEC_SERVER_URL="ws://${container_ip}:${remote_exec_server_port}"
   fi
 
-  export CODEX_TEST_REMOTE_ENV="${container_name}"
-  export CODEX_TEST_REMOTE_ENV_CONTAINER_NAME="${container_name}"
-  export CODEX_TEST_ENVIRONMENT="docker"
+  export SOFIA_TEST_REMOTE_ENV="${container_name}"
+  export SOFIA_TEST_REMOTE_ENV_CONTAINER_NAME="${container_name}"
+  export SOFIA_TEST_ENVIRONMENT="docker"
 }
 
 wait_for_remote_exec_server_port() {
@@ -111,15 +111,15 @@ wait_for_remote_exec_server_port() {
   return 1
 }
 
-codex_remote_env_cleanup() {
-  if [[ -n "${CODEX_TEST_REMOTE_ENV:-}" ]]; then
-    docker rm -f "${CODEX_TEST_REMOTE_ENV}" >/dev/null 2>&1 || true
-    unset CODEX_TEST_REMOTE_ENV
+sofia_remote_env_cleanup() {
+  if [[ -n "${SOFIA_TEST_REMOTE_ENV:-}" ]]; then
+    docker rm -f "${SOFIA_TEST_REMOTE_ENV}" >/dev/null 2>&1 || true
+    unset SOFIA_TEST_REMOTE_ENV
   fi
-  unset CODEX_TEST_REMOTE_ENV_CONTAINER_NAME
-  unset CODEX_TEST_REMOTE_EXEC_SERVER_PID
-  unset CODEX_TEST_REMOTE_EXEC_SERVER_URL
-  unset CODEX_TEST_ENVIRONMENT
+  unset SOFIA_TEST_REMOTE_ENV_CONTAINER_NAME
+  unset SOFIA_TEST_REMOTE_EXEC_SERVER_PID
+  unset SOFIA_TEST_REMOTE_EXEC_SERVER_URL
+  unset SOFIA_TEST_ENVIRONMENT
 }
 
 if ! is_sourced; then
@@ -131,10 +131,10 @@ old_shell_options="$(set +o)"
 set -euo pipefail
 if setup_remote_env; then
   status=0
-  echo "CODEX_TEST_REMOTE_ENV=${CODEX_TEST_REMOTE_ENV}"
-  echo "CODEX_TEST_ENVIRONMENT=${CODEX_TEST_ENVIRONMENT}"
-  echo "CODEX_TEST_REMOTE_EXEC_SERVER_URL=${CODEX_TEST_REMOTE_EXEC_SERVER_URL}"
-  echo "Remote env ready. Run your command, then call: codex_remote_env_cleanup"
+  echo "SOFIA_TEST_REMOTE_ENV=${SOFIA_TEST_REMOTE_ENV}"
+  echo "SOFIA_TEST_ENVIRONMENT=${SOFIA_TEST_ENVIRONMENT}"
+  echo "SOFIA_TEST_REMOTE_EXEC_SERVER_URL=${SOFIA_TEST_REMOTE_EXEC_SERVER_URL}"
+  echo "Remote env ready. Run your command, then call: sofia_remote_env_cleanup"
 else
   status=$?
 fi

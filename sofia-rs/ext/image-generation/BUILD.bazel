@@ -1,0 +1,9 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "image-generation",
+    compile_data = [
+        "imagegen_description.md",
+    ],
+    crate_name = "sofia_image_generation_extension",
+)

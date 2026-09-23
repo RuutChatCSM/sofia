@@ -24,7 +24,7 @@ jobs:
           # the pinned manylinux runtime wheel that users install.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp/codex-python-sdk-home \
+            -e HOME=/tmp/sofia-python-sdk-home \
             -e UV_LINK_MODE=copy \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
             -w "${GITHUB_WORKSPACE}/sdk/python" \
@@ -80,7 +80,7 @@ jobs:
         with:
           target: x86_64-unknown-linux-gnu
 
-      - name: Build codex with Bazel
+      - name: Build sofia with Bazel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         shell: bash
@@ -88,7 +88,7 @@ jobs:
           set -euo pipefail
           # Use the shared CI wrapper so fork PRs fall back cleanly when
           # BuildBuddy credentials are unavailable. This workflow needs the
-          # built `codex` binary on disk afterwards, so ask the wrapper to
+          # built `sofia` binary on disk afterwards, so ask the wrapper to
           # override CI's default remote_download_minimal behavior.
           ./.github/scripts/run-bazel-ci.sh \
             --remote-download-toplevel \
@@ -97,7 +97,7 @@ jobs:
             --build_metadata=COMMIT_SHA=${GITHUB_SHA} \
             --build_metadata=TAG_job=sdk \
             -- \
-            //codex-rs/cli:codex
+            //sofia-rs/cli:sofia
 
           # Resolve the exact output file using the same wrapper/config path as
           # the build instead of guessing which Bazel convenience symlink is
@@ -108,38 +108,38 @@ jobs:
               cquery \
               --output=files \
               -- \
-              //codex-rs/cli:codex \
+              //sofia-rs/cli:sofia \
               | grep -E '^(/|bazel-out/)' \
               | tail -n 1
           )"
           if [[ "${cquery_output}" = /* ]]; then
-            codex_bazel_output_path="${cquery_output}"
+            sofia_bazel_output_path="${cquery_output}"
           else
-            codex_bazel_output_path="${GITHUB_WORKSPACE}/${cquery_output}"
+            sofia_bazel_output_path="${GITHUB_WORKSPACE}/${cquery_output}"
           fi
-          if [[ -z "${codex_bazel_output_path}" ]]; then
-            echo "Bazel did not report an output path for //codex-rs/cli:codex." >&2
+          if [[ -z "${sofia_bazel_output_path}" ]]; then
+            echo "Bazel did not report an output path for //sofia-rs/cli:sofia." >&2
             exit 1
           fi
-          if [[ ! -e "${codex_bazel_output_path}" ]]; then
-            echo "Unable to locate the Bazel-built codex binary at ${codex_bazel_output_path}." >&2
+          if [[ ! -e "${sofia_bazel_output_path}" ]]; then
+            echo "Unable to locate the Bazel-built sofia binary at ${sofia_bazel_output_path}." >&2
             exit 1
           fi
 
           # Stage the binary into the workspace and point the SDK tests at that
-          # stable path. The tests spawn `codex` directly many times, so using a
+          # stable path. The tests spawn `sofia` directly many times, so using a
           # normal executable path is more reliable than invoking Bazel for each
           # test process.
           install_dir="${GITHUB_WORKSPACE}/.tmp/sdk-ci"
           mkdir -p "${install_dir}"
-          install -m 755 "${codex_bazel_output_path}" "${install_dir}/codex"
-          echo "CODEX_EXEC_PATH=${install_dir}/codex" >> "$GITHUB_ENV"
+          install -m 755 "${sofia_bazel_output_path}" "${install_dir}/sofia"
+          echo "SOFIA_EXEC_PATH=${install_dir}/sofia" >> "$GITHUB_ENV"
 
-      - name: Warm up Bazel-built codex
+      - name: Warm up Bazel-built sofia
         shell: bash
         run: |
           set -euo pipefail
-          "${CODEX_EXEC_PATH}" --version
+          "${SOFIA_EXEC_PATH}" --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -159,7 +159,7 @@ jobs:
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
-          key: bazel-cache-x86_64-unknown-linux-gnu-${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+          key: bazel-cache-x86_64-unknown-linux-gnu-${{ hashFiles('MODULE.bazel', 'sofia-rs/Cargo.lock', 'sofia-rs/Cargo.toml') }}
 
       - name: Check for a clean worktree
         if: always() && !cancelled()

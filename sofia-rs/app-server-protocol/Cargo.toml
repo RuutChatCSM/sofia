@@ -1,0 +1,56 @@
+[package]
+name = "sofia-app-server-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sofia_app_server_protocol"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sofia-experimental-api-macros = { workspace = true }
+sofia-app-server-protocol-noop-macros = { workspace = true }
+sofia-extension-items = { workspace = true }
+sofia-history = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-secrets = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+sofia-utils-redacted-string = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = [
+    "base64",
+    "macros",
+    "server",
+] }
+inventory = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v7"] }
+zstd = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+sofia-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = [
+    "base64",
+    "macros",
+    "schemars",
+    "server",
+] }
+schemars = { workspace = true }
+similar = { workspace = true }
+tempfile = { workspace = true }
+ts-rs = { workspace = true }

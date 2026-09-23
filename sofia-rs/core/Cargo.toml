@@ -1,0 +1,174 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-core"
+version.workspace = true
+
+[lib]
+name = "sofia_core"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+async-channel = { workspace = true }
+base64 = { workspace = true }
+bm25 = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+sofia-analytics = { workspace = true }
+sofia-agent-graph-store = { workspace = true }
+sofia-agent-roles = { workspace = true }
+sofia-api = { workspace = true }
+sofia-app-server-protocol = { workspace = true }
+sofia-apply-patch = { workspace = true }
+sofia-async-utils = { workspace = true }
+sofia-attachment-store = { workspace = true }
+sofia-client = { workspace = true }
+sofia-code-mode = { workspace = true }
+sofia-connectors = { workspace = true }
+sofia-context-fragments = { workspace = true }
+sofia-config = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-diagnostics = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-extension-items = { workspace = true }
+sofia-features = { workspace = true }
+sofia-feedback = { workspace = true }
+sofia-file-system = { workspace = true }
+sofia-login = { workspace = true }
+sofia-memories-read = { workspace = true }
+sofia-mcp = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-execpolicy = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-guardian-context = { workspace = true }
+sofia-history = { workspace = true }
+sofia-hooks = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-install-context = { workspace = true }
+sofia-network-proxy = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-response-debug-context = { workspace = true }
+sofia-prompts = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-rollout-trace = { workspace = true }
+sofia-rmcp-client = { workspace = true }
+sofia-sandboxing = { workspace = true }
+sofia-skills = { workspace = true }
+sofia-skills-extension = { workspace = true }
+sofia-state = { workspace = true }
+sofia-terminal-detection = { workspace = true }
+sofia-thread-store = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-audio = { workspace = true }
+sofia-utils-cache = { workspace = true }
+sofia-utils-git-discovery = { workspace = true }
+sofia-utils-image = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+sofia-utils-output-truncation = { workspace = true }
+sofia-utils-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+sofia-utils-plugins = { workspace = true }
+sofia-utils-pty = { workspace = true }
+sofia-utils-string = { workspace = true }
+sofia-utils-stream-parser = { workspace = true }
+sofia-windows-sandbox = { package = "sofia-windows-sandbox", path = "../windows-sandbox-rs" }
+dirs = { workspace = true }
+dunce = { workspace = true }
+eventsource-stream = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+iana-time-zone = { workspace = true }
+image = { workspace = true, features = ["jpeg", "png", "webp"] }
+indexmap = { workspace = true }
+libc = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+regex-lite = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = [
+    "base64",
+    "macros",
+    "schemars",
+    "server",
+] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+shlex = { workspace = true }
+similar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-std",
+    "macros",
+    "process",
+    "rt-multi-thread",
+    "signal",
+] }
+tokio-util = { workspace = true, features = ["rt"] }
+tokio-tungstenite = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+url = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4", "v5", "v7"] }
+which = { workspace = true }
+whoami = { workspace = true }
+
+# Build OpenSSL from source for musl builds.
+[target.x86_64-unknown-linux-musl.dependencies]
+openssl-sys = { workspace = true, features = ["vendored"] }
+
+# Build OpenSSL from source for musl builds.
+[target.aarch64-unknown-linux-musl.dependencies]
+openssl-sys = { workspace = true, features = ["vendored"] }
+
+[target.'cfg(unix)'.dependencies]
+sofia-shell-escalation = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+assert_matches = { workspace = true }
+sofia-exec-server-test-support = { workspace = true }
+sofia-image-generation-extension = { workspace = true }
+sofia-home = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-test-binary-support = { workspace = true }
+sofia-utils-cargo-bin = { workspace = true }
+sofia-utils-redacted-string = { workspace = true }
+sofia-web-search-extension = { workspace = true }
+core_test_support = { workspace = true }
+ctor = { workspace = true }
+insta = { workspace = true }
+maplit = { workspace = true }
+opentelemetry = { workspace = true }
+predicates = { workspace = true }
+pretty_assertions = { workspace = true }
+test-case = "3.3.1"
+opentelemetry_sdk = { workspace = true, features = [
+    "experimental_metrics_custom_reader",
+    "metrics",
+] }
+serial_test = { workspace = true }
+tempfile = { workspace = true }
+test-log = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-test = { workspace = true, features = ["no-env-filter"] }
+walkdir = { workspace = true }
+wiremock = { workspace = true }
+zstd = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["openssl-sys"]
+ignored-paths = ["tests/remote_env_windows/*.rs"]

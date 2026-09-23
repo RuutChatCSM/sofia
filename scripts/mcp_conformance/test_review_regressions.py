@@ -219,7 +219,7 @@ def test_shipping_legacy_registration_preserves_the_reserved_protocol_environmen
     None
 ):
     command = _review_registration_command(
-        Path("/opt/codex"),
+        Path("/opt/sofia"),
         Path("/src/server.py"),
         transport="stdio",
         mode=SHIPPING_LEGACY_VERSION,
@@ -228,12 +228,12 @@ def test_shipping_legacy_registration_preserves_the_reserved_protocol_environmen
     )
 
     assert command == [
-        "/opt/codex",
+        "/opt/sofia",
         "mcp",
         "add",
         "mcp_spec_fixture",
         "--env",
-        f"CODEX_MCP_PROTOCOL_VERSION={LEGACY_ENVIRONMENT_SENTINEL}",
+        f"SOFIA_MCP_PROTOCOL_VERSION={LEGACY_ENVIRONMENT_SENTINEL}",
         "--",
         sys.executable,
         "/src/server.py",
@@ -248,7 +248,7 @@ def test_shipping_legacy_registration_preserves_the_reserved_protocol_environmen
 
 def test_modern_registration_explicitly_opts_into_the_modern_protocol() -> None:
     command = _review_registration_command(
-        Path("/opt/codex"),
+        Path("/opt/sofia"),
         Path("/src/server.py"),
         transport="stdio",
         mode=MODERN_VERSION,
@@ -256,13 +256,13 @@ def test_modern_registration_explicitly_opts_into_the_modern_protocol() -> None:
         http_url=None,
     )
 
-    assert f"CODEX_MCP_PROTOCOL_VERSION={MODERN_VERSION}" in command
+    assert f"SOFIA_MCP_PROTOCOL_VERSION={MODERN_VERSION}" in command
 
 
 def test_http_review_registration_requires_a_real_fixture_url() -> None:
     with pytest.raises(ValueError, match="fixture URL"):
         _review_registration_command(
-            Path("/opt/codex"),
+            Path("/opt/sofia"),
             Path("/src/server.py"),
             transport="http",
             mode=MODERN_VERSION,
@@ -274,7 +274,7 @@ def test_http_review_registration_requires_a_real_fixture_url() -> None:
 def test_review_cli_supports_the_real_shipping_protocol_and_json_report() -> None:
     args = _parse_args(
         [
-            "/opt/codex",
+            "/opt/sofia",
             "--mode",
             SHIPPING_LEGACY_VERSION,
             "--report",
@@ -289,7 +289,7 @@ def test_review_cli_supports_the_real_shipping_protocol_and_json_report() -> Non
 def test_review_cli_reports_a_missing_codex_binary(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["/path/to/nonexistent-review-codex"]) == 2
+    assert main(["/path/to/nonexistent-review-sofia"]) == 2
     assert "not executable" in capsys.readouterr().err
 
 
@@ -546,7 +546,7 @@ def test_catalog_boundary_stdio_registration_uses_the_exact_fixture_profile(
     mode: str, profile: str
 ) -> None:
     command = _review_registration_command(
-        Path("/opt/codex"),
+        Path("/opt/sofia"),
         Path("/src/server.py"),
         transport="stdio",
         mode=mode,
@@ -570,7 +570,7 @@ def test_review_matrix_appends_all_transport_catalog_boundaries(
     observed: list[tuple[str, str, str]] = []
 
     def fake_run_review_case(
-        codex_binary: Path,
+        sofia_binary: Path,
         server_script: Path,
         *,
         mode: str,
@@ -587,7 +587,7 @@ def test_review_matrix_appends_all_transport_catalog_boundaries(
 
     monkeypatch.setattr("review_regressions._run_review_case", fake_run_review_case)
     report = run_review_regressions(
-        Path("/opt/codex"),
+        Path("/opt/sofia"),
         modes=REVIEW_MODES,
         server_script=Path("/src/server.py"),
         artifact_parent=tmp_path,
@@ -976,7 +976,7 @@ def test_review_json_is_pretty_sorted_and_newline_terminated(tmp_path: Path) -> 
 def test_review_cli_supports_a_reviewed_production_baseline() -> None:
     args = _parse_args(
         [
-            "/opt/codex",
+            "/opt/sofia",
             "--baseline-report",
             "/tmp/review-regression-baseline-v1.json",
             "--report",

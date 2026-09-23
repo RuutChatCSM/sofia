@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "exec-server-protocol",
+    crate_name = "sofia_exec_server_protocol",
+)

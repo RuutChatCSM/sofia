@@ -1,0 +1,22 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-guardian-context"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_guardian_context"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-context-fragments = { workspace = true }
+sofia-history = { workspace = true }
+sofia-protocol = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "sofia-experimental-api-macros",
+    crate_name = "sofia_experimental_api_macros",
+    proc_macro = True,
+)

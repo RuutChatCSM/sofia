@@ -1,0 +1,45 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-cloud-tasks"
+version.workspace = true
+
+[lib]
+name = "sofia_cloud_tasks"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+clap = { workspace = true, features = ["derive"] }
+sofia-http-client = { workspace = true }
+sofia-cloud-tasks-client = { workspace = true }
+# TODO: sofia-cloud-tasks-mock-client should be in dev-dependencies.
+sofia-cloud-tasks-mock-client = { workspace = true }
+sofia-core = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-login = { path = "../login" }
+sofia-model-provider = { workspace = true }
+sofia-tui = { workspace = true }
+sofia-utils-cli = { workspace = true }
+crossterm = { workspace = true, features = ["event-stream"] }
+http = { workspace = true }
+owo-colors = { workspace = true, features = ["supports-colors"] }
+ratatui = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+supports-color = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-stream = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+pretty_assertions = { workspace = true }

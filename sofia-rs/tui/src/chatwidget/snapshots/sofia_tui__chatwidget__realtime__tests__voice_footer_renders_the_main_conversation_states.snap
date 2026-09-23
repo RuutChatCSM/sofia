@@ -1,0 +1,29 @@
+---
+source: tui/src/chatwidget/realtime_tests.rs
+assertion_line: 176
+expression: "states.join(\"\\n\\n\")"
+---
+connecting:
+› Ask Sofia to do anything
+
+   voice ◌ connecting   /voice stop   /voice mute
+
+listening:
+› Ask Sofia to do anything
+
+   voice ● listening   /voice stop   mic ░░░░░  sofia ░░░░░   /voice mute
+
+speaking:
+› Ask Sofia to do anything
+
+   voice ● speaking   /voice stop   mic ████░  sofia █████   /voice mute
+
+muted:
+› Ask Sofia to do anything
+
+   voice ◌ muted   /voice stop   mic off  sofia ████░   /voice mute
+
+transcript:
+› Ask Sofia to do anything
+
+   voice ● speaking   /voice stop   mic ██░░░  sofia ██░░░   /voice mute

@@ -1,0 +1,43 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-mcp-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_mcp_extension"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sofia-core = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-config = { workspace = true }
+sofia-connectors = { workspace = true }
+sofia-connectors-extension = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-features = { workspace = true }
+sofia-mcp = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+axum = { workspace = true }
+sofia-exec-server-test-support = { workspace = true }
+sofia-login = { workspace = true }
+futures = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-util = { workspace = true, features = ["rt"] }

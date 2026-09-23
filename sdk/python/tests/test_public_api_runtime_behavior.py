@@ -10,8 +10,8 @@ import openai_codex.api as public_api_module
 from openai_codex.api import (
     ApprovalMode,
     AsyncCodex,
-    Codex,
     Sandbox,
+    Sofia,
 )
 from openai_codex.generated.v2_all import TurnStartParams
 from openai_codex.models import InitializeResponse
@@ -55,14 +55,14 @@ def test_codex_init_failure_closes_client(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(public_api_module, "CodexClient", FakeClient)
 
     with pytest.raises(RuntimeError, match="missing required metadata"):
-        Codex()
+        Sofia()
 
     assert closed == [True]
 
 
 def test_async_codex_init_failure_closes_client() -> None:
     async def scenario() -> None:
-        codex = AsyncCodex()
+        sofia = AsyncCodex()
         close_calls = 0
 
         async def fake_start() -> None:
@@ -75,23 +75,23 @@ def test_async_codex_init_failure_closes_client() -> None:
             nonlocal close_calls
             close_calls += 1
 
-        codex._client.start = fake_start  # type: ignore[method-assign]
-        codex._client.initialize = fake_initialize  # type: ignore[method-assign]
-        codex._client.close = fake_close  # type: ignore[method-assign]
+        sofia._client.start = fake_start  # type: ignore[method-assign]
+        sofia._client.initialize = fake_initialize  # type: ignore[method-assign]
+        sofia._client.close = fake_close  # type: ignore[method-assign]
 
         with pytest.raises(RuntimeError, match="missing required metadata"):
-            await codex.models()
+            await sofia.models()
 
         assert close_calls == 1
-        assert codex._initialized is False
-        assert codex._init is None
+        assert sofia._initialized is False
+        assert sofia._init is None
 
     asyncio.run(scenario())
 
 
 def test_async_codex_initializes_only_once_under_concurrency() -> None:
     async def scenario() -> None:
-        codex = AsyncCodex()
+        sofia = AsyncCodex()
         start_calls = 0
         initialize_calls = 0
         ready = asyncio.Event()
@@ -107,8 +107,8 @@ def test_async_codex_initializes_only_once_under_concurrency() -> None:
             await asyncio.sleep(0.02)
             return InitializeResponse.model_validate(
                 {
-                    "userAgent": "codex-cli/1.2.3",
-                    "serverInfo": {"name": "codex-cli", "version": "1.2.3"},
+                    "userAgent": "sofia-cli/1.2.3",
+                    "serverInfo": {"name": "sofia-cli", "version": "1.2.3"},
                 }
             )
 
@@ -116,11 +116,11 @@ def test_async_codex_initializes_only_once_under_concurrency() -> None:
             await ready.wait()
             return object()
 
-        codex._client.start = fake_start  # type: ignore[method-assign]
-        codex._client.initialize = fake_initialize  # type: ignore[method-assign]
-        codex._client.model_list = fake_model_list  # type: ignore[method-assign]
+        sofia._client.start = fake_start  # type: ignore[method-assign]
+        sofia._client.initialize = fake_initialize  # type: ignore[method-assign]
+        sofia._client.model_list = fake_model_list  # type: ignore[method-assign]
 
-        await asyncio.gather(codex.models(), codex.models())
+        await asyncio.gather(sofia.models(), sofia.models())
 
         assert start_calls == 1
         assert initialize_calls == 1

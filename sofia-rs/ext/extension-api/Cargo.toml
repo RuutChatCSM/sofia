@@ -1,0 +1,30 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-extension-api"
+version.workspace = true
+
+[lib]
+name = "sofia_extension_api"
+path = "src/lib.rs"
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-history = { workspace = true }
+sofia-config = { workspace = true }
+sofia-context-fragments = { workspace = true }
+sofia-exec-server-protocol = { workspace = true }
+sofia-mcp = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

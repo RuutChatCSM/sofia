@@ -1,0 +1,137 @@
+[package]
+name = "sofia-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+default-run = "sofia"
+
+[[bin]]
+name = "sofia"
+path = "src/main.rs"
+
+[[bin]]
+name = "logs_client"
+path = "src/bin/logs_client.rs"
+
+[lib]
+name = "sofia_cli"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+clap_complete = { workspace = true }
+sofia-app-server = { workspace = true }
+sofia-app-server-daemon = { workspace = true }
+sofia-app-server-protocol = { workspace = true }
+sofia-app-server-test-client = { workspace = true }
+sofia-arg0 = { workspace = true }
+sofia-build-info = { workspace = true }
+sofia-api = { workspace = true }
+sofia-aws-auth = { workspace = true }
+sofia-chatgpt = { workspace = true }
+sofia-cloud-config = { workspace = true }
+sofia-cloud-tasks = { path = "../cloud-tasks" }
+sofia-utils-cli = { workspace = true }
+sofia-config = { workspace = true }
+sofia-core = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-history = { workspace = true }
+sofia-home = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-exec = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-execpolicy = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-features = { workspace = true }
+sofia-git-attribution = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-install-context = { workspace = true }
+sofia-login = { workspace = true }
+sofia-memories-write = { workspace = true }
+sofia-mcp = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-responses-api-proxy = { workspace = true }
+sofia-rmcp-client = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-rollout-trace = { workspace = true }
+sofia-sandboxing = { workspace = true }
+sofia-skills-extension = { workspace = true }
+sofia-state = { workspace = true }
+sofia-stdio-to-uds = { workspace = true }
+sofia-terminal-detection = { workspace = true }
+sofia-thread-store = { workspace = true }
+sofia-tui = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+sofia-utils-path = { workspace = true }
+crossterm = { workspace = true }
+http = { workspace = true }
+libc = { workspace = true }
+os_info = { workspace = true }
+owo-colors = { workspace = true }
+regex-lite = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+supports-color = { workspace = true }
+sys-locale = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-std",
+    "macros",
+    "net",
+    "process",
+    "rt-multi-thread",
+    "signal",
+    "time",
+] }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+unicode-segmentation = { workspace = true }
+url = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
+tikv-jemallocator = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+sofia_windows_sandbox = { package = "sofia-windows-sandbox", path = "../windows-sandbox-rs" }
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+app_test_support = { workspace = true }
+assert_cmd = { workspace = true }
+assert_matches = { workspace = true }
+sofia-utils-cargo-bin = { workspace = true }
+sofia-utils-pty = { workspace = true }
+flate2 = { workspace = true }
+futures = { workspace = true }
+insta = { workspace = true }
+predicates = { workspace = true }
+pretty_assertions = { workspace = true }
+sqlx = { workspace = true }
+tar = { workspace = true }
+tokio-tungstenite = { workspace = true }
+wiremock = { workspace = true }
+zstd = { workspace = true }
+
+[package.metadata.cargo-shear]
+# These Rust sources are intentionally Bazel-only macrobenchmarks rather than
+# Cargo targets.
+ignored-paths = ["e2e_benches/*.rs"]

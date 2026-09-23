@@ -1,0 +1,34 @@
+[package]
+name = "sofia-execpolicy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sofia exec policy: prefix-based Starlark rules for command decisions."
+
+[lib]
+name = "sofia_execpolicy"
+path = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "sofia-execpolicy"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+sofia-utils-absolute-path = { workspace = true }
+multimap = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+shlex = { workspace = true }
+starlark = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "rt"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

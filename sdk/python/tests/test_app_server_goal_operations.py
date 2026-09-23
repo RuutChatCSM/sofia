@@ -8,7 +8,7 @@ from app_server_harness import (
 )
 from app_server_helpers import agent_message_texts
 
-from openai_codex import Codex
+from openai_codex import Sofia
 from openai_codex._goal import _GoalNotificationStream
 from openai_codex._run import _collect_turn_result
 from openai_codex.generated.notification_registry import notification_turn_id
@@ -45,21 +45,21 @@ def test_private_goal_operation_coalesces_runtime_continuations(tmp_path) -> Non
             )
         )
 
-        with Codex(config=harness.app_server_config()) as codex:
-            thread = codex.thread_start()
-            state, turn_id = codex._client.start_goal_operation(  # noqa: SLF001
+        with Sofia(config=harness.app_server_config()) as sofia:
+            thread = sofia.thread_start()
+            state, turn_id = sofia._client.start_goal_operation(  # noqa: SLF001
                 thread.id,
                 "Improve benchmark coverage",
             )
             stream = _GoalNotificationStream(
                 state,
                 state.next_notification,
-                lambda: codex._client.unregister_goal_operation(state),  # noqa: SLF001
-                lambda: codex._client.cancel_goal_operation(state),  # noqa: SLF001
+                lambda: sofia._client.unregister_goal_operation(state),  # noqa: SLF001
+                lambda: sofia._client.cancel_goal_operation(state),  # noqa: SLF001
             )
             events = list(stream)
             result = _collect_turn_result(iter(events), turn_id=turn_id)
-            routes = codex._client._router._goal_operations.copy()  # noqa: SLF001
+            routes = sofia._client._router._goal_operations.copy()  # noqa: SLF001
             requests = harness.responses.wait_for_requests(3)
 
     lifecycle = [event.method for event in events if event.method.startswith("turn/")]

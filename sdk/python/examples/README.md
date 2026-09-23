@@ -2,7 +2,7 @@
 
 Each example folder contains runnable versions:
 
-- `sync.py` (public sync surface: `Codex`)
+- `sync.py` (public sync surface: `Sofia`)
 - `async.py` (public async surface: `AsyncCodex`)
 
 All examples intentionally use only public SDK exports from `openai_codex`
@@ -19,10 +19,10 @@ multimodal or structured input lists.
 Install the published SDK:
 
 ```bash
-python -m pip install openai-codex
+python -m pip install openai-sofia
 ```
 
-The SDK installs its pinned `openai-codex-cli-bin` runtime dependency.
+The SDK installs its pinned `openai-sofia-cli-bin` runtime dependency.
 The pinned runtime version comes from the SDK package dependency.
 
 ## Run From A Checkout

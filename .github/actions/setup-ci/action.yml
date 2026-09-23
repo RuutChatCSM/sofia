@@ -22,7 +22,7 @@ runs:
     - name: Configure CI build root (Unix)
       if: runner.os != 'Windows'
       shell: bash
-      run: echo "CI_BUILD_ROOT=$HOME/.cache/codex-ci" >> "$GITHUB_ENV"
+      run: echo "CI_BUILD_ROOT=$HOME/.cache/sofia-ci" >> "$GITHUB_ENV"
 
     - name: Enable unprivileged user namespaces (Linux)
       if: runner.os == 'Linux'
@@ -62,7 +62,7 @@ runs:
         echo "cargo-target-dir=$cargo_target_dir" >> "$GITHUB_OUTPUT"
 
         {
-          echo "CODEX_REPO_ROOT=$GITHUB_WORKSPACE"
+          echo "SOFIA_REPO_ROOT=$GITHUB_WORKSPACE"
           echo "BAZEL_OUTPUT_BASE=$bazel_output_base"
           echo "BAZEL_OUTPUT_USER_ROOT=$bazel_output_user_root"
           echo "BAZEL_REPOSITORY_CACHE=$bazel_repository_cache"

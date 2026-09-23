@@ -1,0 +1,52 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-rollout"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_rollout"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+sofia-extension-items = { workspace = true }
+sofia-file-search = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-history = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-state = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+time = { workspace = true, features = [
+    "formatting",
+    "local-offset",
+    "macros",
+    "parsing",
+] }
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "sync",
+    "time",
+] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+zstd = { workspace = true }
+
+[dev-dependencies]
+sofia-utils-absolute-path = { workspace = true }
+pretty_assertions = { workspace = true }

@@ -1,0 +1,41 @@
+[package]
+name = "sofia-sandboxing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sofia_sandboxing"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sofia-network-proxy = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+sofia-utils-pty = { workspace = true }
+sofia-windows-sandbox = { workspace = true }
+dunce = { workspace = true }
+libc = { workspace = true }
+serde_json = { workspace = true }
+regex-lite = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"] }
+tracing = { workspace = true, features = ["log"] }
+url = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+sofia-mxc-sandbox = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

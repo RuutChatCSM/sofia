@@ -1,0 +1,173 @@
+[package]
+name = "sofia-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autobins = false
+
+[[bin]]
+name = "sofia-tui"
+path = "src/main.rs"
+
+[[bin]]
+name = "md-events"
+path = "src/bin/md-events.rs"
+
+[lib]
+name = "sofia_tui"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-build-info = { workspace = true }
+anyhow = { workspace = true }
+axum = { workspace = true, default-features = false, features = ["http1", "tokio"] }
+base64 = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+clap = { workspace = true, features = ["derive"] }
+sofia-ansi-escape = { workspace = true }
+sofia-app-server-client = { workspace = true }
+sofia-app-server-protocol = { workspace = true }
+sofia-arg0 = { workspace = true }
+sofia-install-context = { workspace = true }
+sofia-cloud-config = { workspace = true }
+sofia-config = { workspace = true }
+sofia-context-fragments = { workspace = true }
+sofia-connectors = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-history = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-features = { workspace = true }
+sofia-feedback = { workspace = true }
+sofia-file-search = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-login = { workspace = true }
+sofia-message-history = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-realtime-webrtc = { workspace = true }
+futures = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-sandboxing = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-state = { workspace = true }
+sofia-terminal-detection = { workspace = true }
+sofia-worktree = { workspace = true }
+sofia-utils-approval-presets = { workspace = true }
+sofia-uds = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-cli = { workspace = true }
+sofia-utils-elapsed = { workspace = true }
+sofia-utils-fuzzy-match = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+sofia-utils-oss = { workspace = true }
+sofia-utils-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+sofia-utils-plugins = { workspace = true }
+sofia-utils-sandbox-summary = { workspace = true }
+sofia-utils-sleep-inhibitor = { workspace = true }
+sofia-utils-string = { workspace = true }
+color-eyre = { workspace = true }
+crossterm = { workspace = true, features = ["bracketed-paste", "event-stream"] }
+derive_more = { workspace = true, features = ["is_variant"] }
+diffy = { workspace = true }
+dirs = { workspace = true }
+dunce = { workspace = true }
+image = { workspace = true, features = ["jpeg", "png", "gif", "webp"] }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
+pathdiff = { workspace = true }
+pulldown-cmark = { workspace = true, features = ["html"] }
+rand = { workspace = true }
+ratatui = { workspace = true, features = [
+    "scrolling-regions",
+    "unstable-backend-writer",
+    "unstable-rendered-line-info",
+    "unstable-widget-ref",
+] }
+ratatui-macros = { workspace = true }
+regex-lite = { workspace = true }
+rmcp = { workspace = true, features = ["server", "transport-streamable-http-server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+sha2 = { workspace = true }
+shlex = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+supports-color = { workspace = true }
+tempfile = { workspace = true }
+textwrap = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-std",
+    "macros",
+    "process",
+    "rt-multi-thread",
+    "signal",
+    "test-util",
+    "time",
+] }
+tokio-stream = { workspace = true, features = ["sync"] }
+toml = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+syntect = "5"
+two-face = { version = "0.5", default-features = false, features = ["syntect-default-onig"] }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+webbrowser = { workspace = true }
+uuid = { workspace = true }
+
+sofia-windows-sandbox = { workspace = true }
+tokio-util = { workspace = true, features = ["time"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+which = { workspace = true }
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+winsplit = "0.1"
+
+# Clipboard support via `arboard` is not available on Android/Termux.
+# Only include it for non-Android targets so the crate builds on Android.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+arboard = { workspace = true }
+
+
+[dev-dependencies]
+app_test_support = { workspace = true }
+sofia-mcp = { workspace = true }
+core_test_support = { workspace = true }
+sofia-utils-cargo-bin = { workspace = true }
+assert_matches = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
+http = { workspace = true }
+insta = { workspace = true }
+pretty_assertions = { workspace = true }
+rand = { workspace = true }
+serial_test = { workspace = true }
+tokio-tungstenite = { workspace = true }
+vt100 = { workspace = true }
+uuid = { workspace = true }
+wiremock = { workspace = true }

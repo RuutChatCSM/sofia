@@ -23,20 +23,20 @@ class AssembleTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.package = self.root / "app"
         (self.package / "bin").mkdir(parents=True)
-        (self.package / "codex-resources").mkdir()
-        (self.package / "codex-path").mkdir()
+        (self.package / "sofia-resources").mkdir()
+        (self.package / "sofia-path").mkdir()
         self.commit = "a" * 40
         self.metadata = {
             "layoutVersion": 1,
             "version": f"0.0.0+{self.commit}",
             "target": "aarch64-unknown-linux-musl",
-            "variant": "codex",
-            "entrypoint": "bin/codex",
-            "resourcesDir": "codex-resources",
-            "pathDir": "codex-path",
+            "variant": "sofia",
+            "entrypoint": "bin/sofia",
+            "resourcesDir": "sofia-resources",
+            "pathDir": "sofia-path",
         }
-        (self.package / "codex-package.json").write_text(json.dumps(self.metadata))
-        (self.package / "bin/codex").write_bytes(b"unchanged app")
+        (self.package / "sofia-package.json").write_text(json.dumps(self.metadata))
+        (self.package / "bin/sofia").write_bytes(b"unchanged app")
         self.helper = self.root / "helper.exe"
         self.helper.write_bytes(b"private helper")
         self.helper.chmod(0o755)
@@ -83,10 +83,10 @@ class AssembleTests(unittest.TestCase):
                 runtime, receipt = self.make_runtime(target, plugin)
                 (runtime / "unlisted-file").write_bytes(b"must not ship")
                 windows = target.endswith("windows-msvc")
-                entrypoint = "bin/codex.exe" if windows else "bin/codex"
+                entrypoint = "bin/sofia.exe" if windows else "bin/sofia"
                 self.metadata.update(target=target, entrypoint=entrypoint)
                 (self.package / entrypoint).write_bytes(b"unchanged app")
-                (self.package / "codex-package.json").write_text(
+                (self.package / "sofia-package.json").write_text(
                     json.dumps(self.metadata)
                 )
                 output = self.root / (target + " packaged")
@@ -112,7 +112,7 @@ class AssembleTests(unittest.TestCase):
                     cwd=self.root,
                     env={**os.environ, "PYTHONSAFEPATH": "1"},
                 )
-                voice = output / "codex-resources/voice"
+                voice = output / "sofia-resources/voice"
                 self.assertFalse((voice / "unlisted-file").exists())
                 expected = {r["path"]: r["sha256"] for r in receipt["libraries"]}
                 expected["runtime.json"] = digest(runtime / "runtime.json")
@@ -123,14 +123,14 @@ class AssembleTests(unittest.TestCase):
                     {name: digest(runtime / name) for name in expected}, expected
                 )
                 manifest = json.loads((voice / "manifest.json").read_text())
-                helper_name = "codex-voice-host.exe" if windows else "codex-voice-host"
+                helper_name = "sofia-voice-host.exe" if windows else "sofia-voice-host"
                 self.assertEqual(
                     manifest["sha256"],
                     {
                         entrypoint: digest(self.package / entrypoint),
-                        f"codex-resources/voice/bin/{helper_name}": digest(self.helper),
+                        f"sofia-resources/voice/bin/{helper_name}": digest(self.helper),
                         **{
-                            f"codex-resources/voice/{name}": value
+                            f"sofia-resources/voice/{name}": value
                             for name, value in expected.items()
                         },
                     },
@@ -175,7 +175,7 @@ class AssembleTests(unittest.TestCase):
         for name in (
             "../outside.so",
             "lib/../outside.so",
-            "bin/codex-voice-host",
+            "bin/sofia-voice-host",
             "lib/evil:stream.so",
         ):
             changes.append({"libraries": [{**original["libraries"][0], "path": name}]})
@@ -293,7 +293,7 @@ class AssembleTests(unittest.TestCase):
                 json.loads((runtime / "runtime.json").read_text()), receipt
             )
             self.assertEqual(
-                (self.package / "bin/codex").read_bytes(), b"unchanged app"
+                (self.package / "bin/sofia").read_bytes(), b"unchanged app"
             )
 
     def test_copies_app_unchanged_and_records_distinct_linux_targets(self):
@@ -306,16 +306,16 @@ class AssembleTests(unittest.TestCase):
             self.output,
             runtime=runtime,
         )
-        self.assertEqual((self.output / "bin/codex").read_bytes(), b"unchanged app")
-        self.assertEqual((self.package / "bin/codex").read_bytes(), b"unchanged app")
-        self.assertFalse((self.package / "codex-resources/voice").exists())
+        self.assertEqual((self.output / "bin/sofia").read_bytes(), b"unchanged app")
+        self.assertEqual((self.package / "bin/sofia").read_bytes(), b"unchanged app")
+        self.assertFalse((self.package / "sofia-resources/voice").exists())
         self.assertEqual(
-            (self.output / "codex-package.json").read_bytes(),
-            (self.package / "codex-package.json").read_bytes(),
+            (self.output / "sofia-package.json").read_bytes(),
+            (self.package / "sofia-package.json").read_bytes(),
         )
         self.assertEqual(
             json.loads(
-                (self.output / "codex-resources/voice/manifest.json").read_text()
+                (self.output / "sofia-resources/voice/manifest.json").read_text()
             ),
             {
                 "schemaVersion": 1,
@@ -324,15 +324,15 @@ class AssembleTests(unittest.TestCase):
                 "voiceTarget": "aarch64-unknown-linux-gnu",
                 "appVersion": self.metadata["version"],
                 "sha256": {
-                    "bin/codex": hashlib.sha256(b"unchanged app").hexdigest(),
-                    "codex-resources/voice/bin/codex-voice-host": hashlib.sha256(
+                    "bin/sofia": hashlib.sha256(b"unchanged app").hexdigest(),
+                    "sofia-resources/voice/bin/sofia-voice-host": hashlib.sha256(
                         b"private helper"
                     ).hexdigest(),
                     **{
-                        f"codex-resources/voice/{r['path']}": r["sha256"]
+                        f"sofia-resources/voice/{r['path']}": r["sha256"]
                         for r in receipt["libraries"]
                     },
-                    "codex-resources/voice/runtime.json": digest(
+                    "sofia-resources/voice/runtime.json": digest(
                         runtime / "runtime.json"
                     ),
                 },
@@ -366,7 +366,7 @@ class AssembleTests(unittest.TestCase):
             target = f"{architecture}-unknown-linux-gnu"
             with self.subTest(target=target):
                 self.metadata["target"] = target
-                (self.package / "codex-package.json").write_text(
+                (self.package / "sofia-package.json").write_text(
                     json.dumps(self.metadata)
                 )
                 runtime, receipt = self.make_runtime(target)
@@ -380,7 +380,7 @@ class AssembleTests(unittest.TestCase):
                     runtime=runtime,
                 )
                 manifest = json.loads(
-                    (output / "codex-resources/voice/manifest.json").read_text()
+                    (output / "sofia-resources/voice/manifest.json").read_text()
                 )
                 self.assertEqual(
                     manifest,
@@ -391,24 +391,24 @@ class AssembleTests(unittest.TestCase):
                         "voiceTarget": target,
                         "appVersion": self.metadata["version"],
                         "sha256": {
-                            "bin/codex": hashlib.sha256(b"unchanged app").hexdigest(),
-                            "codex-resources/voice/bin/codex-voice-host": hashlib.sha256(
+                            "bin/sofia": hashlib.sha256(b"unchanged app").hexdigest(),
+                            "sofia-resources/voice/bin/sofia-voice-host": hashlib.sha256(
                                 b"private helper"
                             ).hexdigest(),
                             **{
-                                f"codex-resources/voice/{r['path']}": r["sha256"]
+                                f"sofia-resources/voice/{r['path']}": r["sha256"]
                                 for r in receipt["libraries"]
                             },
-                            "codex-resources/voice/runtime.json": digest(
+                            "sofia-resources/voice/runtime.json": digest(
                                 runtime / "runtime.json"
                             ),
                         },
                     },
                 )
-                self.assertEqual((output / "bin/codex").read_bytes(), b"unchanged app")
+                self.assertEqual((output / "bin/sofia").read_bytes(), b"unchanged app")
                 self.assertEqual(
                     (
-                        output / "codex-resources/voice/bin/codex-voice-host"
+                        output / "sofia-resources/voice/bin/sofia-voice-host"
                     ).read_bytes(),
                     self.helper.read_bytes(),
                 )
@@ -441,7 +441,7 @@ class AssembleTests(unittest.TestCase):
                     runtime=runtime,
                 )
         self.assertFalse(self.output.exists())
-        self.assertEqual((self.package / "bin/codex").read_bytes(), b"unchanged app")
+        self.assertEqual((self.package / "bin/sofia").read_bytes(), b"unchanged app")
 
 
 if __name__ == "__main__":

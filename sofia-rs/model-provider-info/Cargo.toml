@@ -1,0 +1,30 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-model-provider-info"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_model_provider_info"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-api = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+sofia-utils-redacted-string = { workspace = true }
+http = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+sofia-utils-absolute-path = { workspace = true }
+maplit = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+toml = { workspace = true }

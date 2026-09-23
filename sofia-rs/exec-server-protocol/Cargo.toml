@@ -1,0 +1,26 @@
+[package]
+name = "sofia-exec-server-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sofia_exec_server_protocol"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+sofia-file-system = { workspace = true }
+sofia-network-proxy = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["arbitrary_precision", "raw_value"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

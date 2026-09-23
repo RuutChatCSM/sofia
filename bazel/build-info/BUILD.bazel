@@ -8,5 +8,5 @@ expand_template(
     stamp = 1,
     stamp_substitutions = {"{BUILD_COMMIT}": "{{STABLE_GIT_COMMIT}}"},
     template = ["STABLE_GIT_COMMIT={BUILD_COMMIT}"],
-    visibility = ["//codex-rs:__subpackages__"],
+    visibility = ["//sofia-rs:__subpackages__"],
 )

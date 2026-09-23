@@ -1,0 +1,21 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-memories-read"
+version.workspace = true
+
+[lib]
+name = "sofia_memories_read"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-protocol = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

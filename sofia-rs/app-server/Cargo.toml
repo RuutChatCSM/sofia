@@ -1,0 +1,152 @@
+[package]
+name = "sofia-app-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sofia-app-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "sofia-app-server-test-notify-capture"
+path = "src/bin/notify_capture.rs"
+
+[[bin]]
+name = "exec-server"
+path = "src/bin/exec_server.rs"
+
+[lib]
+name = "sofia_app_server"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = { workspace = true }
+axum = { workspace = true, default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+    "ws",
+] }
+sofia-analytics = { workspace = true }
+sofia-agent-extension = { workspace = true }
+sofia-arg0 = { workspace = true }
+sofia-aws-auth = { workspace = true }
+sofia-cloud-config = { workspace = true }
+sofia-code-mode = { workspace = true }
+sofia-config = { workspace = true }
+sofia-connectors = { workspace = true }
+sofia-core = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-diagnostics = { workspace = true }
+sofia-home = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-external-agent-migration = { workspace = true }
+sofia-features = { workspace = true }
+sofia-goal-extension = { workspace = true }
+sofia-git-attribution = { workspace = true }
+sofia-guardian-v2 = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-file-watcher = { workspace = true }
+sofia-hooks = { workspace = true }
+sofia-history-notes-extension = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-shell-command = { workspace = true }
+sofia-skills = { workspace = true }
+sofia-skills-extension = { workspace = true }
+sofia-utils-cli = { workspace = true }
+sofia-user-verification = { workspace = true }
+sofia-utils-pty = { workspace = true }
+sofia-backend-client = { workspace = true }
+sofia-file-search = { workspace = true }
+sofia-chatgpt = { workspace = true }
+sofia-login = { workspace = true }
+sofia-image-generation-extension = { workspace = true }
+sofia-memories-extension = { workspace = true }
+sofia-web-search-extension = { workspace = true }
+sofia-memories-write = { workspace = true }
+sofia-mcp = { workspace = true }
+sofia-mcp-extension = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-queue-extension = { workspace = true }
+sofia-app-server-protocol = { workspace = true }
+sofia-app-server-transport = { workspace = true }
+sofia-feedback = { workspace = true }
+sofia-rmcp-client = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-sandboxing = { workspace = true }
+sofia-state = { workspace = true }
+sofia-thread-store = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-json-to-toml = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+futures = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-std",
+    "macros",
+    "process",
+    "rt-multi-thread",
+    "signal",
+] }
+tokio-util = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
+url = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v7"] }
+
+[target.'cfg(all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
+tikv-jemallocator = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+sofia-windows-sandbox = { workspace = true }
+
+[dev-dependencies]
+app_test_support = { workspace = true }
+axum = { workspace = true, default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+] }
+base64 = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-utils-cargo-bin = { workspace = true }
+core_test_support = { workspace = true }
+flate2 = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+pretty_assertions = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = [
+    "elicitation",
+    "server",
+    "transport-streamable-http-server",
+] }
+serial_test = { workspace = true }
+shlex = { workspace = true }
+tar = { workspace = true }
+test-case = "3.3.1"
+tokio-tungstenite = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+wiremock = { workspace = true }

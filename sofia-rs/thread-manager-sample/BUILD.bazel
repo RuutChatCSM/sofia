@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "thread-manager-sample",
+    crate_name = "sofia_thread_manager_sample",
+)

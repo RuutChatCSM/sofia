@@ -45,7 +45,7 @@ jobs:
               )
 
           pyproject = tomllib.loads(Path("sdk/python/pyproject.toml").read_text())
-          prefix = "openai-codex-cli-bin=="
+          prefix = "openai-sofia-cli-bin=="
           runtime_versions = [
               dependency.removeprefix(prefix)
               for dependency in pyproject["project"]["dependencies"]
@@ -133,7 +133,7 @@ jobs:
 
           try:
               with urllib.request.urlopen(
-                  f"https://pypi.org/pypi/openai-codex-cli-bin/{version}/json",
+                  f"https://pypi.org/pypi/openai-sofia-cli-bin/{version}/json",
                   timeout=30,
               ) as response:
                   payload = json.load(response)
@@ -184,10 +184,10 @@ jobs:
           # the pinned manylinux runtime wheel.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp/codex-python-sdk-home \
+            -e HOME=/tmp/sofia-python-sdk-home \
             -e UV_LINK_MODE=copy \
             -e SDK_VERSION \
-            -e SDK_STAGE_DIR="${RUNNER_TEMP}/openai-codex" \
+            -e SDK_STAGE_DIR="${RUNNER_TEMP}/openai-sofia" \
             -e SDK_DIST_DIR="${GITHUB_WORKSPACE}/dist/python-sdk" \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
             -v "${RUNNER_TEMP}:${RUNNER_TEMP}" \

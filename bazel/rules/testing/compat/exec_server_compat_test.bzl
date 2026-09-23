@@ -5,20 +5,20 @@ load("//:defs.bzl", "workspace_root_test")
 def exec_server_compat_test(
         name,
         comparison_binary = None,
-        current_binary = "//codex-rs/cli:codex",
+        current_binary = "//sofia-rs/cli:sofia",
         release = None):
-    """Tests both executor directions against another Codex build or release.
+    """Tests both executor directions against another Sofia build or release.
 
     Args:
         name: Name of the generated compatibility test target.
-        comparison_binary: Built Codex executable to compare with the current build.
-        current_binary: Built Codex executable representing the current version.
-        release: External release repository exposing `:codex` and `:package`.
+        comparison_binary: Built Sofia executable to compare with the current build.
+        current_binary: Built Sofia executable representing the current version.
+        release: External release repository exposing `:sofia` and `:package`.
     """
     if (comparison_binary == None) == (release == None):
         fail("exactly one of comparison_binary and release must be set")
 
-    comparison = comparison_binary if release == None else release + "//:codex"
+    comparison = comparison_binary if release == None else release + "//:sofia"
     data = [] if release == None else [release + "//:package"]
     comparison_alias = name + "-comparison-binary"
     native.alias(
@@ -33,9 +33,9 @@ def exec_server_compat_test(
         args = ["--test-threads=1"],
         data = data,
         runfile_env = {
-            "//codex-rs/bwrap:bwrap": "CARGO_BIN_EXE_bwrap",
-            current_binary: "CODEX_TEST_CURRENT_CODEX",
-            ":" + comparison_alias: "CODEX_TEST_RELEASED_CODEX",
+            "//sofia-rs/bwrap:bwrap": "CARGO_BIN_EXE_bwrap",
+            current_binary: "SOFIA_TEST_CURRENT_CODEX",
+            ":" + comparison_alias: "SOFIA_TEST_RELEASED_CODEX",
         },
         tags = ["no-sandbox"],
         target_compatible_with = [
@@ -43,5 +43,5 @@ def exec_server_compat_test(
             "@platforms//os:linux",
         ],
         test_bin = "//bazel/rules/testing/compat:exec-server-compat-test-bin",
-        workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
+        workspace_root_marker = "//sofia-rs/utils/cargo-bin:repo_root.marker",
     )

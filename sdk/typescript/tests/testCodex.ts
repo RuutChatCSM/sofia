@@ -1,11 +1,11 @@
 import path from "node:path";
 
-import { Codex } from "../src/codex";
+import { Sofia } from "../src/sofia";
 import type { CodexConfigObject } from "../src/codexOptions";
 
 export const codexExecPath =
-  process.env.CODEX_EXEC_PATH ??
-  path.join(process.cwd(), "..", "..", "codex-rs", "target", "debug", "codex");
+  process.env.SOFIA_EXEC_PATH ??
+  path.join(process.cwd(), "..", "..", "sofia-rs", "target", "debug", "sofia");
 
 type CreateTestClientOptions = {
   apiKey?: string;
@@ -18,7 +18,7 @@ type CreateTestClientOptions = {
 
 export type TestClient = {
   cleanup: () => void;
-  client: Codex;
+  client: Sofia;
 };
 
 export function createMockClient(url: string): TestClient {
@@ -43,7 +43,7 @@ export function createTestClient(options: CreateTestClientOptions = {}): TestCli
 
   return {
     cleanup: () => {},
-    client: new Codex({
+    client: new Sofia({
       codexPathOverride: codexExecPath,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
@@ -80,7 +80,7 @@ function mergeTestConfig(
   return {
     ...mergedConfig,
     // Disable plugins in SDK integration tests so background curated-plugin
-    // sync does not race temp CODEX_HOME cleanup.
+    // sync does not race temp SOFIA_HOME cleanup.
     features:
       featureOverrides && typeof featureOverrides === "object" && !Array.isArray(featureOverrides)
         ? { ...featureOverrides, plugins: false }
@@ -96,7 +96,7 @@ function getCurrentEnv(): Record<string, string> {
   const env: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(process.env)) {
-    if (key === "CODEX_INTERNAL_ORIGINATOR_OVERRIDE") {
+    if (key === "SOFIA_INTERNAL_ORIGINATOR_OVERRIDE") {
       continue;
     }
     if (value !== undefined) {

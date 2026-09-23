@@ -18,7 +18,7 @@ class JsonRpcError(CodexError):
 
 
 class TransportClosedError(CodexError):
-    """Raised when the Codex transport closes unexpectedly."""
+    """Raised when the Sofia transport closes unexpectedly."""
 
 
 class CodexRpcError(JsonRpcError):
@@ -66,7 +66,7 @@ def _is_server_overloaded(data: Any) -> bool:
         return data.lower() == "server_overloaded"
 
     if isinstance(data, dict):
-        direct = data.get("codex_error_info") or data.get("codexErrorInfo") or data.get("errorInfo")
+        direct = data.get("sofia_error_info") or data.get("codexErrorInfo") or data.get("errorInfo")
         if isinstance(direct, str) and direct.lower() == "server_overloaded":
             return True
         if isinstance(direct, dict):

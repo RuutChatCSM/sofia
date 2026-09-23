@@ -1,0 +1,15 @@
+---
+source: tui/src/model_migration.rs
+expression: terminal.backend()
+---
+
+> Sofia just got an upgrade. Introducing gpt-5.1-sofia-mini.
+
+  We recommend switching from gpt-5-sofia-mini to
+  gpt-5.1-sofia-mini.
+
+  Optimized for sofia. Cheaper, faster, but less capable.
+  Learn more about gpt-5.1-sofia-mini at
+  https://www.sofia.com/models/gpt-5.1-sofia-mini
+
+  Press enter to continue

@@ -1,0 +1,13 @@
+---
+source: cli/src/main.rs
+assertion_line: 3401
+expression: "errors.join(\"\\n\")"
+---
+sofia --worktree login: `--worktree` supports new interactive sessions, `sofia fork`, `sofia exec`, and `sofia exec fork`
+sofia fork --worktree: `sofia fork --worktree` requires an explicit session ID
+sofia fork --worktree --last: `sofia fork --worktree` requires an explicit session ID
+sofia exec resume --worktree session: `--worktree` cannot resume an existing session; use `sofia exec fork --worktree`
+sofia exec review --worktree: `--worktree` is not supported for code review
+sofia resume --worktree session: `--worktree` supports new interactive sessions, `sofia fork`, `sofia exec`, and `sofia exec fork`
+sofia archive session --worktree: `--worktree` supports new interactive sessions, `sofia fork`, `sofia exec`, and `sofia exec fork`
+sofia queue --thread session --message hi --worktree: `--worktree` supports new interactive sessions, `sofia fork`, `sofia exec`, and `sofia exec fork`

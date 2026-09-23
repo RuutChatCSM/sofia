@@ -1,0 +1,9 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "rmcp-client",
+    crate_name = "sofia_rmcp_client",
+    extra_binaries = [
+        "//sofia-rs/cli:sofia",
+    ],
+)

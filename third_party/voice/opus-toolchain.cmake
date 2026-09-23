@@ -1,5 +1,5 @@
 # CMake's generator must use the Ninja declared in the Bazel action.
-set(CMAKE_MAKE_PROGRAM "$ENV{CODEX_VOICE_NINJA}" CACHE FILEPATH "" FORCE)
+set(CMAKE_MAKE_PROGRAM "$ENV{SOFIA_VOICE_NINJA}" CACHE FILEPATH "" FORCE)
 # Archiver paths from Bazel are relative to the execution root.
 get_filename_component(CMAKE_AR "$ENV{AR}" ABSOLUTE
     BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/../..")

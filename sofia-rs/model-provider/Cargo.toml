@@ -1,0 +1,36 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-model-provider"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_model_provider"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-api = { workspace = true }
+sofia-agent-identity = { workspace = true }
+sofia-aws-auth = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-feedback = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-response-debug-context = { workspace = true }
+http = { workspace = true }
+tokio = { workspace = true, features = ["process", "sync", "time"] }
+tracing = { workspace = true, features = ["log"] }
+
+[dev-dependencies]
+sofia-utils-redacted-string = { workspace = true }
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock = { workspace = true }

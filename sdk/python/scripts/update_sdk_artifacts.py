@@ -23,10 +23,10 @@ if _SDK_PYTHON_ROOT not in sys.path:
 
 from release_version import normalize_codex_version  # noqa: E402
 
-SDK_DISTRIBUTION_NAME = "openai-codex"
-RUNTIME_DISTRIBUTION_NAME = "openai-codex-cli-bin"
-RUNTIME_PACKAGE_ROOT = Path("src") / "codex_cli_bin"
-CODEX_PACKAGE_METADATA = "codex-package.json"
+SDK_DISTRIBUTION_NAME = "openai-sofia"
+RUNTIME_DISTRIBUTION_NAME = "openai-sofia-cli-bin"
+RUNTIME_PACKAGE_ROOT = Path("src") / "sofia_cli_bin"
+SOFIA_PACKAGE_METADATA = "sofia-package.json"
 
 
 def repo_root() -> Path:
@@ -48,7 +48,7 @@ def sdk_pyproject_path() -> Path:
 
 def schema_bundle_path(schema_dir: Path) -> Path:
     """Return the aggregate v2 schema bundle emitted by the runtime binary."""
-    return schema_dir / "codex_app_server_protocol.v2.schemas.json"
+    return schema_dir / "sofia_app_server_protocol.v2.schemas.json"
 
 
 def _is_windows() -> bool:
@@ -56,11 +56,11 @@ def _is_windows() -> bool:
 
 
 def runtime_binary_name() -> str:
-    return "codex.exe" if _is_windows() else "codex"
+    return "sofia.exe" if _is_windows() else "sofia"
 
 
 def runtime_code_mode_host_name() -> str:
-    return "codex-code-mode-host.exe" if _is_windows() else "codex-code-mode-host"
+    return "sofia-code-mode-host.exe" if _is_windows() else "sofia-code-mode-host"
 
 
 def staged_runtime_package_root(root: Path) -> Path:
@@ -106,7 +106,7 @@ def pinned_runtime_version() -> str:
 
 
 def pinned_runtime_codex_path() -> Path:
-    """Return the bundled Codex binary from the installed pinned runtime wheel."""
+    """Return the bundled Sofia binary from the installed pinned runtime wheel."""
     expected_version = pinned_runtime_version()
     try:
         installed_version = importlib.metadata.version(RUNTIME_DISTRIBUTION_NAME)
@@ -124,16 +124,16 @@ def pinned_runtime_codex_path() -> Path:
         )
 
     try:
-        from codex_cli_bin import bundled_codex_path
+        from sofia_cli_bin import bundled_codex_path
     except ImportError as exc:
         raise RuntimeError(
             f"Installed {RUNTIME_DISTRIBUTION_NAME} package does not expose bundled_codex_path."
         ) from exc
 
-    codex_path = bundled_codex_path()
-    if not codex_path.exists():
-        raise RuntimeError(f"Pinned Codex runtime binary not found at {codex_path}.")
-    return codex_path
+    sofia_path = bundled_codex_path()
+    if not sofia_path.exists():
+        raise RuntimeError(f"Pinned Sofia runtime binary not found at {sofia_path}.")
+    return sofia_path
 
 
 def _copy_package_tree(src: Path, dst: Path) -> None:
@@ -227,11 +227,11 @@ def stage_python_sdk_package(staging_dir: Path, sdk_version: str) -> Path:
 
 def stage_python_runtime_package(
     staging_dir: Path,
-    codex_version: str,
+    sofia_version: str,
     package_archive: Path,
     platform_tag: str | None = None,
 ) -> Path:
-    package_version = normalize_codex_version(codex_version)
+    package_version = normalize_codex_version(sofia_version)
     _copy_package_tree(python_runtime_root(), staging_dir)
 
     pyproject_path = staging_dir / "pyproject.toml"
@@ -248,7 +248,7 @@ def stage_python_runtime_package(
 
 def _extract_codex_package_archive(package_archive: Path, runtime_package_root: Path) -> None:
     if not package_archive.name.endswith(".tar.gz"):
-        raise RuntimeError(f"Expected a .tar.gz Codex package archive: {package_archive}")
+        raise RuntimeError(f"Expected a .tar.gz Sofia package archive: {package_archive}")
 
     runtime_package_root.mkdir(parents=True, exist_ok=True)
     with tarfile.open(package_archive, "r:gz") as archive:
@@ -262,9 +262,9 @@ def _extract_codex_package_archive(package_archive: Path, runtime_package_root: 
 
 def _validate_codex_package_layout(package_dir: Path, package_archive: Path) -> None:
     missing_entries = []
-    if not (package_dir / CODEX_PACKAGE_METADATA).is_file():
-        missing_entries.append(CODEX_PACKAGE_METADATA)
-    for entry in ("bin", "codex-resources", "codex-path"):
+    if not (package_dir / SOFIA_PACKAGE_METADATA).is_file():
+        missing_entries.append(SOFIA_PACKAGE_METADATA)
+    for entry in ("bin", "sofia-resources", "sofia-path"):
         if not (package_dir / entry).is_dir():
             missing_entries.append(entry)
     package_binary = package_dir / "bin" / runtime_binary_name()
@@ -275,7 +275,7 @@ def _validate_codex_package_layout(package_dir: Path, package_archive: Path) -> 
         missing_entries.append(str(Path("bin") / runtime_code_mode_host_name()))
     if missing_entries:
         missing = ", ".join(missing_entries)
-        raise RuntimeError(f"Missing Codex package layout entries in {package_archive}: {missing}")
+        raise RuntimeError(f"Missing Sofia package layout entries in {package_archive}: {missing}")
 
 
 def _flatten_string_enum_one_of(definition: dict[str, Any]) -> bool:
@@ -529,13 +529,13 @@ def _make_chatgpt_account_email_nullable(schema: dict[str, Any]) -> None:
 
 def generate_schema_from_pinned_runtime(schema_dir: Path) -> Path:
     """Generate app-server schemas by invoking the installed pinned runtime binary."""
-    codex_path = pinned_runtime_codex_path()
+    sofia_path = pinned_runtime_codex_path()
     if schema_dir.exists():
         shutil.rmtree(schema_dir)
     schema_dir.mkdir(parents=True)
     run(
         [
-            str(codex_path),
+            str(sofia_path),
             "app-server",
             "generate-json-schema",
             "--out",
@@ -1063,7 +1063,7 @@ def _render_codex_block(
         *_approval_mode_start_signature_lines(),
         *_kw_signature_lines(thread_start_fields),
         "    ) -> Thread:",
-        '        """Create a new Codex conversation thread."""',
+        '        """Create a new Sofia conversation thread."""',
         _approval_mode_assignment_line("_approval_mode_settings"),
         "        params = ThreadStartParams(",
         *_approval_mode_model_arg_lines(),
@@ -1142,7 +1142,7 @@ def _render_async_codex_block(
         *_approval_mode_start_signature_lines(),
         *_kw_signature_lines(thread_start_fields),
         "    ) -> AsyncThread:",
-        '        """Create a new Codex conversation thread."""',
+        '        """Create a new Sofia conversation thread."""',
         "        await self._ensure_initialized()",
         _approval_mode_assignment_line("_approval_mode_settings"),
         "        params = ThreadStartParams(",
@@ -1317,7 +1317,7 @@ def generate_public_api_flat_methods() -> None:
     source = public_api_path.read_text()
     source = _replace_generated_block(
         source,
-        "Codex.flat_methods",
+        "Sofia.flat_methods",
         _render_codex_block(
             thread_start_fields,
             thread_list_fields,
@@ -1359,7 +1359,7 @@ def generate_types_from_schema_dir(schema_dir: Path) -> None:
 
 def generate_types() -> None:
     """Generate schemas from the pinned runtime and then refresh SDK artifacts."""
-    with tempfile.TemporaryDirectory(prefix="codex-python-schema-") as td:
+    with tempfile.TemporaryDirectory(prefix="sofia-python-schema-") as td:
         schema_dir = generate_schema_from_pinned_runtime(Path(td) / "schema")
         generate_types_from_schema_dir(schema_dir)
 
@@ -1400,13 +1400,13 @@ def build_parser() -> argparse.ArgumentParser:
     stage_runtime_parser.add_argument(
         "package_archive",
         type=Path,
-        help="Path to a Codex package .tar.gz archive for this platform.",
+        help="Path to a Sofia package .tar.gz archive for this platform.",
     )
     stage_runtime_parser.add_argument(
-        "--codex-version",
+        "--sofia-version",
         required=True,
         help=(
-            "Codex release version to write into the staged runtime package. "
+            "Sofia release version to write into the staged runtime package. "
             "Accepts PEP 440 versions or release tags such as "
             "rust-v0.116.0-alpha.1.2."
         ),
@@ -1446,7 +1446,7 @@ def run_command(args: argparse.Namespace, ops: CliOps) -> None:
     elif args.command == "stage-runtime":
         ops.stage_python_runtime_package(
             args.staging_dir,
-            normalize_codex_version(args.codex_version),
+            normalize_codex_version(args.sofia_version),
             args.package_archive.resolve(),
             args.platform_tag,
         )

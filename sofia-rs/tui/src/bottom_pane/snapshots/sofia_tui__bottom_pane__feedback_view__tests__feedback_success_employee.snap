@@ -1,0 +1,10 @@
+---
+source: tui/src/bottom_pane/feedback_view.rs
+expression: rendered
+---
+• Feedback uploaded. You can share this in #sofia-feedback:
+
+  http://go/sofia-feedback-internal
+
+  Sentry Feedback ID: thread-2
+  Sentry URL: https://go/sofia-feedback/thread-2

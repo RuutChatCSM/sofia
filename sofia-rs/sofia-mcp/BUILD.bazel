@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "sofia-mcp",
+    crate_name = "sofia_mcp",
+    test_data_extra = glob(["src/**/snapshots/**"]),
+)

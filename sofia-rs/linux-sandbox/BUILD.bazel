@@ -1,0 +1,13 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "linux-sandbox",
+    crate_name = "sofia_linux_sandbox",
+    extra_binaries = [
+        "//sofia-rs/bwrap:bwrap",
+    ],
+    rustc_env_files = select({
+        "@platforms//os:linux": ["//sofia-rs/bwrap:bwrap-sha256-env"],
+        "//conditions:default": [],
+    }),
+)

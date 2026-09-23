@@ -26,7 +26,7 @@ export type {
 export { Thread } from "./thread";
 export type { RunResult, RunStreamedResult, Input, UserInput } from "./thread";
 
-export { Codex } from "./codex";
+export { Sofia } from "./sofia";
 
 export type { CodexOptions } from "./codexOptions";
 

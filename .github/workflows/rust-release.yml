@@ -1,12 +1,12 @@
-# Release workflow for codex-rs.
+# Release workflow for sofia-rs.
 # To release, follow a workflow like:
 # ```
 # git tag -a rust-v0.1.0 -m "Release 0.1.0"
 # git push origin rust-v0.1.0
 # ```
 #
-# Tag releases sign macOS binaries and DMGs through the protected `codesigning`
-# GitHub environment and Azure Key Vault before final verification on macOS.
+# Tag releases sign and notarize macOS binaries and DMGs through the protected
+# `codesigning` GitHub environment before final verification on macOS.
 
 name: rust-release
 on:
@@ -15,9 +15,9 @@ on:
       - "rust-v*.*.*"
 
 env:
-  CODEX_REPO_ROOT: ${{ github.workspace }}
-  CODEX_ZSH_RELEASE_TAG: codex-zsh-v0.1.0
-  CODEX_ZSH_MANIFEST_SHA256: c534eab89dcea7e3d8a5e5b3f49c025c7c64cd4e4d9814ee24871de58a9359a1
+  SOFIA_REPO_ROOT: ${{ github.workspace }}
+  SOFIA_ZSH_RELEASE_TAG: sofia-zsh-v0.1.0
+  SOFIA_ZSH_MANIFEST_SHA256: c534eab89dcea7e3d8a5e5b3f49c025c7c64cd4e4d9814ee24871de58a9359a1
 
 concurrency:
   group: ${{ github.workflow }}
@@ -48,7 +48,7 @@ jobs:
             || { echo "❌  Tag '${GITHUB_REF_NAME}' doesn't match expected format"; exit 1; }
 
           tag_ver="${GITHUB_REF_NAME#rust-v}"
-          cargo_ver="$(grep -m1 '^version' codex-rs/Cargo.toml \
+          cargo_ver="$(grep -m1 '^version' sofia-rs/Cargo.toml \
                         | sed -E 's/version *= *"([^"]+)".*/\1/')"
 
           [[ "${tag_ver}" == "${cargo_ver}" ]] \
@@ -69,7 +69,7 @@ jobs:
       id-token: write
     defaults:
       run:
-        working-directory: codex-rs
+        working-directory: sofia-rs
     env:
       # macOS release packages archive packed dSYM bundles before stripping.
       CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: ${{ contains(matrix.target, 'apple-darwin') && 'packed' || 'off' }}
@@ -87,50 +87,50 @@ jobs:
             target: aarch64-apple-darwin
             bundle: primary
             artifact_name: aarch64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             build_dmg: "true"
           - runner: macos-15
             target: aarch64-apple-darwin
             bundle: app-server
             artifact_name: aarch64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
           - runner: macos-15
             target: x86_64-apple-darwin
             bundle: primary
             artifact_name: x86_64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             build_dmg: "true"
           - runner: macos-15
             target: x86_64-apple-darwin
             bundle: app-server
             artifact_name: x86_64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
           # Release artifacts intentionally ship MUSL-linked Linux binaries.
           - runner: ${{ github.event.repository.name }}-linux-x64-xl
             target: x86_64-unknown-linux-musl
             bundle: primary
             artifact_name: x86_64-unknown-linux-musl
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy bwrap"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy bwrap"
             build_dmg: "false"
           - runner: ${{ github.event.repository.name }}-linux-x64-xl
             target: x86_64-unknown-linux-musl
             bundle: app-server
             artifact_name: x86_64-unknown-linux-musl-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
           - runner: ${{ github.event.repository.name }}-linux-arm64
             target: aarch64-unknown-linux-musl
             bundle: primary
             artifact_name: aarch64-unknown-linux-musl
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy bwrap"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy bwrap"
             build_dmg: "false"
           - runner: ${{ github.event.repository.name }}-linux-arm64
             target: aarch64-unknown-linux-musl
             bundle: app-server
             artifact_name: aarch64-unknown-linux-musl-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
 
     steps:
@@ -231,12 +231,12 @@ jobs:
             exit 1
           fi
 
-          # Codex embeds this digest at build time and verifies the bundled
+          # Sofia embeds this digest at build time and verifies the bundled
           # bwrap resource before use. Strip bwrap before hashing so the digest
           # covers the exact bytes that the release packages.
           strip --strip-debug --strip-unneeded "$bwrap_path"
           digest="$(sha256sum "$bwrap_path" | awk '{print $1}')"
-          echo "CODEX_BWRAP_SHA256=${digest}" >> "$GITHUB_ENV"
+          echo "SOFIA_BWRAP_SHA256=${digest}" >> "$GITHUB_ENV"
           echo "Built bwrap ${bwrap_path} with sha256:${digest}"
 
       - name: Cargo build
@@ -249,7 +249,7 @@ jobs:
           build_args=()
           for binary in ${{ matrix.binaries }}; do
             # bwrap was built, finalized, and hashed before this build so
-            # Codex can embed the digest of the bytes that will be packaged.
+            # Sofia can embed the digest of the bytes that will be packaged.
             if [[ "$binary" == "bwrap" ]]; then
               continue
             fi
@@ -263,7 +263,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cargo-timings-rust-release-${{ matrix.target }}-${{ matrix.bundle }}
-          path: codex-rs/target/**/cargo-timings/cargo-timing.html
+          path: sofia-rs/target/**/cargo-timings/cargo-timing.html
           if-no-files-found: warn
 
       - name: Build symbols archive and strip binaries
@@ -272,7 +272,7 @@ jobs:
           binaries=()
           for binary in ${{ matrix.binaries }}; do
             # bwrap is already stripped before hashing. Its symbols are not
-            # useful enough to justify a separate pre-Codex symbols pass.
+            # useful enough to justify a separate pre-Sofia symbols pass.
             if [[ "$binary" == "bwrap" ]]; then
               continue
             fi
@@ -289,7 +289,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}-symbols
-          path: codex-rs/symbols-dist/${{ matrix.artifact_name }}/*
+          path: sofia-rs/symbols-dist/${{ matrix.artifact_name }}/*
           if-no-files-found: error
 
       - if: ${{ runner.os == 'macOS' }}
@@ -322,7 +322,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}-unsigned
-          path: codex-rs/unsigned-dist/${{ matrix.target }}/*
+          path: sofia-rs/unsigned-dist/${{ matrix.target }}/*
           if-no-files-found: error
 
       - if: ${{ contains(matrix.target, 'linux') }}
@@ -330,7 +330,7 @@ jobs:
         uses: ./.github/actions/linux-code-sign
         with:
           target: ${{ matrix.target }}
-          artifacts-dir: ${{ github.workspace }}/codex-rs/target/${{ matrix.target }}/release
+          artifacts-dir: ${{ github.workspace }}/sofia-rs/target/${{ matrix.target }}/release
           binaries: ${{ matrix.binaries }}
 
       - name: Stage artifacts
@@ -343,7 +343,7 @@ jobs:
           for binary in ${{ matrix.binaries }}; do
             # Both variants package the host, but only the primary bundle publishes
             # standalone binary archives to avoid duplicate release asset names.
-            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "codex-code-mode-host" ]]; then
+            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "sofia-code-mode-host" ]]; then
               continue
             fi
             cp "target/${{ matrix.target }}/release/${binary}" "$dest/${binary}-${{ matrix.target }}"
@@ -354,7 +354,7 @@ jobs:
           done
 
           if [[ "${{ matrix.build_dmg }}" == "true" ]]; then
-            cp target/${{ matrix.target }}/release/codex-${{ matrix.target }}.dmg "$dest/codex-${{ matrix.target }}.dmg"
+            cp target/${{ matrix.target }}/release/sofia-${{ matrix.target }}.dmg "$dest/sofia-${{ matrix.target }}.dmg"
           fi
 
       - name: Download packaged zsh manifest
@@ -363,12 +363,12 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL \
-            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${CODEX_ZSH_RELEASE_TAG}/codex-zsh" \
-            -o "${RUNNER_TEMP}/codex-zsh"
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${SOFIA_ZSH_RELEASE_TAG}/sofia-zsh" \
+            -o "${RUNNER_TEMP}/sofia-zsh"
           bash "${GITHUB_WORKSPACE}/.github/scripts/verify-zsh-manifest.sh" \
-            "${RUNNER_TEMP}/codex-zsh" "$CODEX_ZSH_MANIFEST_SHA256"
+            "${RUNNER_TEMP}/sofia-zsh" "$SOFIA_ZSH_MANIFEST_SHA256"
 
-      - name: Build Codex package archive
+      - name: Build Sofia package archive
         if: ${{ runner.os != 'macOS' }}
         shell: bash
         env:
@@ -376,12 +376,12 @@ jobs:
           BUNDLE: ${{ matrix.bundle }}
         run: |
           set -euo pipefail
-          bash "${GITHUB_WORKSPACE}/.github/scripts/build-codex-package-archive.sh" \
+          bash "${GITHUB_WORKSPACE}/.github/scripts/build-sofia-package-archive.sh" \
             --target "$TARGET" \
             --bundle "$BUNDLE" \
             --entrypoint-dir "target/${TARGET}/release" \
             --archive-dir "dist/${TARGET}" \
-            --zsh-manifest "${RUNNER_TEMP}/codex-zsh"
+            --zsh-manifest "${RUNNER_TEMP}/sofia-zsh"
 
       - name: Build Python runtime wheel
         if: ${{ matrix.bundle == 'primary' && runner.os != 'macOS' }}
@@ -413,14 +413,14 @@ jobs:
           # the Homebrew Python as externally managed under PEP 668.
           "${RUNNER_TEMP}/python-runtime-build-venv/bin/python" -m pip install build
 
-          stage_dir="${RUNNER_TEMP}/openai-codex-cli-bin-${{ matrix.target }}"
+          stage_dir="${RUNNER_TEMP}/openai-sofia-cli-bin-${{ matrix.target }}"
           wheel_dir="${GITHUB_WORKSPACE}/python-runtime-dist/${{ matrix.target }}"
           stage_runtime_args=(
             "${GITHUB_WORKSPACE}/sdk/python/scripts/update_sdk_artifacts.py"
             stage-runtime
             "$stage_dir"
-            "dist/${{ matrix.target }}/codex-package-${{ matrix.target }}.tar.gz"
-            --codex-version "${GITHUB_REF_NAME}"
+            "dist/${{ matrix.target }}/sofia-package-${{ matrix.target }}.tar.gz"
+            --sofia-version "${GITHUB_REF_NAME}"
             --platform-tag "$platform_tag"
           )
           python3 "${stage_runtime_args[@]}"
@@ -445,8 +445,8 @@ jobs:
           # For compatibility with environments that lack the `zstd` tool we
           # additionally create a `.tar.gz` alongside every binary we publish.
           # The end result is:
-          #   codex-<target>.zst          (existing)
-          #   codex-<target>.tar.gz       (new)
+          #   sofia-<target>.zst          (existing)
+          #   sofia-<target>.tar.gz       (new)
 
           # 1. Produce a .tar.gz for every file in the directory *before* we
           #    run `zstd --rm`, because that flag deletes the original files.
@@ -478,19 +478,18 @@ jobs:
           # Upload the per-binary .zst files, .tar.gz equivalents, and any
           # prebuilt archives staged above.
           path: |
-            codex-rs/dist/${{ matrix.target }}/*
+            sofia-rs/dist/${{ matrix.target }}/*
 
   sign-macos-binaries:
     needs: build
     name: Sign macOS binaries - ${{ matrix.target }} - ${{ matrix.bundle }}
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     timeout-minutes: 45
     environment:
       name: codesigning
       deployment: false
     permissions:
       contents: read
-      id-token: write
 
     strategy:
       fail-fast: false
@@ -499,19 +498,19 @@ jobs:
           - target: aarch64-apple-darwin
             bundle: primary
             artifact_name: aarch64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
           - target: aarch64-apple-darwin
             bundle: app-server
             artifact_name: aarch64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
           - target: x86_64-apple-darwin
             bundle: primary
             artifact_name: x86_64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
           - target: x86_64-apple-darwin
             bundle: app-server
             artifact_name: x86_64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -524,28 +523,50 @@ jobs:
           name: ${{ matrix.artifact_name }}-unsigned
           path: ${{ runner.temp }}/unsigned-macos
 
-      - name: Set up AKV PKCS11 macOS signing
-        uses: ./.github/actions/setup-akv-pkcs11-codesigning
-        with:
-          rcodesign-blob-uri: ${{ secrets.AKV_CODESIGN_RCODESIGN_BLOB_URI }}
-          rcodesign-sha256: ${{ secrets.AKV_CODESIGN_RCODESIGN_SHA256 }}
-          akv-pkcs11-library-blob-uri: ${{ secrets.AKV_CODESIGN_PKCS11_LIBRARY_BLOB_URI }}
-          akv-pkcs11-library-sha256: ${{ secrets.AKV_CODESIGN_PKCS11_LIBRARY_SHA256 }}
-          azure-client-id: ${{ secrets.AKV_CODESIGN_AZURE_CLIENT_ID }}
-          azure-tenant-id: ${{ secrets.AKV_CODESIGN_TENANT }}
-          azure-subscription-id: ${{ secrets.AKV_CODESIGN_SUBSCRIPTION }}
-          key-vault-name: ${{ secrets.AKV_CODESIGN_KEY_VAULT_NAME }}
-          key-name: ${{ secrets.AKV_CODESIGN_KEY_NAME }}
-          key-version: ${{ secrets.AKV_CODESIGN_KEY_VERSION || '' }}
-          certificate-sha256: ${{ secrets.AKV_CODESIGN_CERTIFICATE_SHA256 || '' }}
+      - name: Set up macOS code signing keychain
+        shell: bash
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE:?MACOS_CERTIFICATE is required for macOS code signing.}"
+          : "${MACOS_CERTIFICATE_PWD:?MACOS_CERTIFICATE_PWD is required for macOS code signing.}"
+
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/signing.keychain-db"
+          keychain_password="sofia-signing-keychain-${GITHUB_RUN_ID}"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode >"$certificate_path"
+          chmod 0600 "$certificate_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PWD" -A -t agg -f pkcs12 -k "$keychain_path"
+          rm -f "$certificate_path"
+
+          security list-keychain -d user -s "$keychain_path"
+          security default-keychain -s "$keychain_path"
+
+          identity="$(
+            security find-identity -v -p codesigning "$keychain_path" |
+              awk '/Developer ID Application/ { print $2; exit }'
+          )"
+          if [[ -z "$identity" ]]; then
+            echo "No 'Developer ID Application' identity found in the signing keychain." >&2
+            exit 1
+          fi
+          echo "IDENTITY=$identity" >>"$GITHUB_ENV"
 
       - name: Sign and notarize macOS binaries
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
           BINARIES: ${{ matrix.binaries }}
-          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.AKV_NOTARIZATION_KEY_NAME }}
-          APPLE_NOTARIZATION_AKV_KEY_VERSION: ${{ secrets.AKV_NOTARIZATION_KEY_VERSION }}
+          AC_API_KEY: ${{ secrets.AC_API_KEY }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
 
@@ -573,7 +594,7 @@ jobs:
 
             .github/scripts/macos-signing/sign_macos_code.sh \
               --target "$signed_path" \
-              --identity unused \
+              --identity "$IDENTITY" \
               --deep false \
               --identifier "$binary" \
               --options runtime \
@@ -581,10 +602,10 @@ jobs:
               --entitlements "$entitlements"
 
             mkdir -p "${report_dir}/${binary}"
-            rcodesign print-signature-info "$signed_path" \
-              >"${report_dir}/${binary}/signature-info.yaml"
+            codesign -dvvv "$signed_path" 2>&1 \
+              >"${report_dir}/${binary}/signature-info.txt"
 
-            .github/scripts/macos-signing/notarize_macos_binary_with_akv.sh \
+            .github/scripts/macos-signing/notarize_macos_binary.sh \
               --binary "$signed_path" \
               --report-dir "${report_dir}/${binary}"
           done
@@ -594,28 +615,29 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.AKV_NOTARIZATION_KEY_NAME }}
-          APPLE_NOTARIZATION_AKV_KEY_VERSION: ${{ secrets.AKV_NOTARIZATION_KEY_VERSION }}
+          AC_API_KEY: ${{ secrets.AC_API_KEY }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
 
           signed_root="${GITHUB_WORKSPACE}/signed-resources/${TARGET}"
-          zsh_manifest="${RUNNER_TEMP}/codex-zsh-${TARGET}"
+          zsh_manifest="${RUNNER_TEMP}/sofia-zsh-${TARGET}"
           mkdir -p "$signed_root"
           curl -fsSL \
-            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${CODEX_ZSH_RELEASE_TAG}/codex-zsh" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${SOFIA_ZSH_RELEASE_TAG}/sofia-zsh" \
             -o "$zsh_manifest"
           bash "${GITHUB_WORKSPACE}/.github/scripts/verify-zsh-manifest.sh" \
-            "$zsh_manifest" "$CODEX_ZSH_MANIFEST_SHA256"
+            "$zsh_manifest" "$SOFIA_ZSH_MANIFEST_SHA256"
 
           PYTHONPATH="${GITHUB_WORKSPACE}/scripts" python3 - "$TARGET" "$signed_root" "$zsh_manifest" <<'PY'
           import shutil
           import sys
           from pathlib import Path
 
-          from codex_package.ripgrep import fetch_rg
-          from codex_package.targets import TARGET_SPECS
-          from codex_package.zsh import resolve_zsh_bin
+          from sofia_package.ripgrep import fetch_rg
+          from sofia_package.targets import TARGET_SPECS
+          from sofia_package.zsh import resolve_zsh_bin
 
           spec = TARGET_SPECS[sys.argv[1]]
           signed_root = Path(sys.argv[2])
@@ -631,18 +653,19 @@ jobs:
             report_dir="${GITHUB_WORKSPACE}/macos-binary-signing-verification/${TARGET}/${resource}"
             mkdir -p "$report_dir"
             chmod 0755 "$binary"
+
             .github/scripts/macos-signing/sign_macos_code.sh \
               --target "$binary" \
-              --identity unused \
+              --identity "$IDENTITY" \
               --deep false \
-              --identifier "com.openai.codex.${resource}" \
+              --identifier "com.openai.sofia.${resource}" \
               --options runtime \
               --timestamp true
 
-            rcodesign print-signature-info "$binary" \
-              >"${report_dir}/signature-info.yaml"
+            codesign -dvvv "$binary" 2>&1 \
+              >"${report_dir}/signature-info.txt"
 
-            .github/scripts/macos-signing/notarize_macos_binary_with_akv.sh \
+            .github/scripts/macos-signing/notarize_macos_binary.sh \
               --binary "$binary" \
               --report-dir "$report_dir"
           done
@@ -679,7 +702,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: codex-rs
+        working-directory: sofia-rs
 
     strategy:
       fail-fast: false
@@ -688,22 +711,22 @@ jobs:
           - target: aarch64-apple-darwin
             bundle: primary
             artifact_name: aarch64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             build_dmg: "true"
           - target: aarch64-apple-darwin
             bundle: app-server
             artifact_name: aarch64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
           - target: x86_64-apple-darwin
             bundle: primary
             artifact_name: x86_64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             build_dmg: "true"
           - target: x86_64-apple-darwin
             bundle: app-server
             artifact_name: x86_64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             build_dmg: "false"
 
     steps:
@@ -715,13 +738,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ matrix.artifact_name }}-signed-binaries
-          path: codex-rs/target/${{ matrix.target }}/release
+          path: sofia-rs/target/${{ matrix.target }}/release
 
       - name: Download signed macOS helpers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ matrix.target }}-signed-resources
-          path: codex-rs/signed-resources/${{ matrix.target }}
+          path: sofia-rs/signed-resources/${{ matrix.target }}
 
       - name: Verify signed macOS binaries
         shell: bash
@@ -747,9 +770,9 @@ jobs:
 
           target="${{ matrix.target }}"
           release_dir="target/${target}/release"
-          dmg_root="${RUNNER_TEMP}/codex-dmg-root-${target}"
-          volname="Codex (${target})"
-          dmg_path="${release_dir}/codex-${target}.dmg"
+          dmg_root="${RUNNER_TEMP}/sofia-dmg-root-${target}"
+          volname="Sofia (${target})"
+          dmg_path="${release_dir}/sofia-${target}.dmg"
 
           rm -rf "$dmg_root"
           mkdir -p "$dmg_root"
@@ -781,7 +804,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}-unsigned-dmg
-          path: codex-rs/target/${{ matrix.target }}/release/codex-${{ matrix.target }}.dmg
+          path: sofia-rs/target/${{ matrix.target }}/release/sofia-${{ matrix.target }}.dmg
           if-no-files-found: error
 
       - name: Stage macOS artifacts
@@ -794,20 +817,20 @@ jobs:
           for binary in ${{ matrix.binaries }}; do
             # Both variants package the host, but only the primary bundle publishes
             # standalone binary archives to avoid duplicate release asset names.
-            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "codex-code-mode-host" ]]; then
+            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "sofia-code-mode-host" ]]; then
               continue
             fi
             cp "target/${{ matrix.target }}/release/${binary}" "$dest/${binary}-${{ matrix.target }}"
           done
 
-      - name: Build Codex package archive
+      - name: Build Sofia package archive
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
           BUNDLE: ${{ matrix.bundle }}
         run: |
           set -euo pipefail
-          bash "${GITHUB_WORKSPACE}/.github/scripts/build-codex-package-archive.sh" \
+          bash "${GITHUB_WORKSPACE}/.github/scripts/build-sofia-package-archive.sh" \
             --target "$TARGET" \
             --bundle "$BUNDLE" \
             --entrypoint-dir "target/${TARGET}/release" \
@@ -837,14 +860,14 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/python-runtime-build-venv"
           "${RUNNER_TEMP}/python-runtime-build-venv/bin/python" -m pip install build
 
-          stage_dir="${RUNNER_TEMP}/openai-codex-cli-bin-${{ matrix.target }}"
+          stage_dir="${RUNNER_TEMP}/openai-sofia-cli-bin-${{ matrix.target }}"
           wheel_dir="${GITHUB_WORKSPACE}/python-runtime-dist/${{ matrix.target }}"
           python3 \
             "${GITHUB_WORKSPACE}/sdk/python/scripts/update_sdk_artifacts.py" \
             stage-runtime \
             "$stage_dir" \
-            "dist/${{ matrix.target }}/codex-package-${{ matrix.target }}.tar.gz" \
-            --codex-version "${GITHUB_REF_NAME}" \
+            "dist/${{ matrix.target }}/sofia-package-${{ matrix.target }}.tar.gz" \
+            --sofia-version "${GITHUB_REF_NAME}" \
             --platform-tag "$platform_tag"
           "${RUNNER_TEMP}/python-runtime-build-venv/bin/python" -m build --wheel --outdir "$wheel_dir" "$stage_dir"
 
@@ -875,20 +898,19 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}-packaged
-          path: codex-rs/dist/${{ matrix.target }}/*
+          path: sofia-rs/dist/${{ matrix.target }}/*
           if-no-files-found: error
 
   sign-macos-dmg:
     needs: package-macos
     name: Sign macOS DMG - ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     timeout-minutes: 45
     environment:
       name: codesigning
       deployment: false
     permissions:
       contents: read
-      id-token: write
 
     strategy:
       fail-fast: false
@@ -910,59 +932,81 @@ jobs:
           name: ${{ matrix.artifact_name }}-unsigned-dmg
           path: ${{ runner.temp }}/unsigned-dmg
 
-      - name: Set up AKV PKCS11 macOS signing
-        uses: ./.github/actions/setup-akv-pkcs11-codesigning
-        with:
-          rcodesign-blob-uri: ${{ secrets.AKV_CODESIGN_RCODESIGN_BLOB_URI }}
-          rcodesign-sha256: ${{ secrets.AKV_CODESIGN_RCODESIGN_SHA256 }}
-          akv-pkcs11-library-blob-uri: ${{ secrets.AKV_CODESIGN_PKCS11_LIBRARY_BLOB_URI }}
-          akv-pkcs11-library-sha256: ${{ secrets.AKV_CODESIGN_PKCS11_LIBRARY_SHA256 }}
-          azure-client-id: ${{ secrets.AKV_CODESIGN_AZURE_CLIENT_ID }}
-          azure-tenant-id: ${{ secrets.AKV_CODESIGN_TENANT }}
-          azure-subscription-id: ${{ secrets.AKV_CODESIGN_SUBSCRIPTION }}
-          key-vault-name: ${{ secrets.AKV_CODESIGN_KEY_VAULT_NAME }}
-          key-name: ${{ secrets.AKV_CODESIGN_KEY_NAME }}
-          key-version: ${{ secrets.AKV_CODESIGN_KEY_VERSION || '' }}
-          certificate-sha256: ${{ secrets.AKV_CODESIGN_CERTIFICATE_SHA256 || '' }}
+      - name: Set up macOS code signing keychain
+        shell: bash
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE:?MACOS_CERTIFICATE is required for macOS code signing.}"
+          : "${MACOS_CERTIFICATE_PWD:?MACOS_CERTIFICATE_PWD is required for macOS code signing.}"
+
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/signing.keychain-db"
+          keychain_password="sofia-signing-keychain-${GITHUB_RUN_ID}"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode >"$certificate_path"
+          chmod 0600 "$certificate_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PWD" -A -t agg -f pkcs12 -k "$keychain_path"
+          rm -f "$certificate_path"
+
+          security list-keychain -d user -s "$keychain_path"
+          security default-keychain -s "$keychain_path"
+
+          identity="$(
+            security find-identity -v -p codesigning "$keychain_path" |
+              awk '/Developer ID Application/ { print $2; exit }'
+          )"
+          if [[ -z "$identity" ]]; then
+            echo "No 'Developer ID Application' identity found in the signing keychain." >&2
+            exit 1
+          fi
+          echo "IDENTITY=$identity" >>"$GITHUB_ENV"
 
       - name: Sign, notarize, and staple macOS DMG
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.AKV_NOTARIZATION_KEY_NAME }}
-          APPLE_NOTARIZATION_AKV_KEY_VERSION: ${{ secrets.AKV_NOTARIZATION_KEY_VERSION }}
+          AC_API_KEY: ${{ secrets.AC_API_KEY }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
 
-          dmg_path="${RUNNER_TEMP}/unsigned-dmg/codex-${TARGET}.dmg"
+          dmg_path="${RUNNER_TEMP}/unsigned-dmg/sofia-${TARGET}.dmg"
           report_dir="${GITHUB_WORKSPACE}/macos-dmg-signing-verification/${TARGET}"
           if [[ ! -f "$dmg_path" ]]; then
             echo "Unsigned DMG $dmg_path not found"
             exit 1
           fi
+          mkdir -p "$report_dir"
 
           .github/scripts/macos-signing/sign_macos_code.sh \
             --target "$dmg_path" \
-            --identity unused \
+            --identity "$IDENTITY" \
             --deep false \
             --timestamp true
 
-          mkdir -p "$report_dir"
-          rcodesign print-signature-info "$dmg_path" \
-            >"${report_dir}/signature-info-before-notarization.yaml"
+          codesign -dvvv "$dmg_path" 2>&1 \
+            >"${report_dir}/signature-info-before-notarization.txt"
 
-          .github/scripts/macos-signing/notarize_macos_dmg_with_akv.sh \
+          .github/scripts/macos-signing/notarize_macos_dmg.sh \
             --dmg "$dmg_path" \
             --report-dir "$report_dir"
 
-          rcodesign print-signature-info "$dmg_path" \
-            >"${report_dir}/signature-info.yaml"
+          codesign -dvvv "$dmg_path" 2>&1 \
+            >"${report_dir}/signature-info.txt"
 
       - name: Upload signed macOS DMG
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}-signed-dmg
-          path: ${{ runner.temp }}/unsigned-dmg/codex-${{ matrix.target }}.dmg
+          path: ${{ runner.temp }}/unsigned-dmg/sofia-${{ matrix.target }}.dmg
           if-no-files-found: error
 
       - name: Upload DMG signing verification
@@ -984,7 +1028,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: codex-rs
+        working-directory: sofia-rs
 
     strategy:
       fail-fast: false
@@ -993,22 +1037,22 @@ jobs:
           - target: aarch64-apple-darwin
             bundle: primary
             artifact_name: aarch64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             verify_dmg: "true"
           - target: aarch64-apple-darwin
             bundle: app-server
             artifact_name: aarch64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             verify_dmg: "false"
           - target: x86_64-apple-darwin
             bundle: primary
             artifact_name: x86_64-apple-darwin
-            binaries: "codex codex-code-mode-host codex-responses-api-proxy"
+            binaries: "sofia sofia-code-mode-host sofia-responses-api-proxy"
             verify_dmg: "true"
           - target: x86_64-apple-darwin
             bundle: app-server
             artifact_name: x86_64-apple-darwin-app-server
-            binaries: "codex-app-server codex-code-mode-host"
+            binaries: "sofia-app-server sofia-code-mode-host"
             verify_dmg: "false"
 
     steps:
@@ -1020,7 +1064,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ matrix.artifact_name }}-packaged
-          path: codex-rs/dist/${{ matrix.target }}
+          path: sofia-rs/dist/${{ matrix.target }}
 
       - name: Download signed macOS binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1081,7 +1125,7 @@ jobs:
 
             # The app-server package contains the host, but its standalone archives
             # are omitted above to avoid duplicate release asset names.
-            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "codex-code-mode-host" ]]; then
+            if [[ "${{ matrix.bundle }}" == "app-server" && "$binary" == "sofia-code-mode-host" ]]; then
               continue
             fi
 
@@ -1098,12 +1142,12 @@ jobs:
 
           case "${{ matrix.bundle }}" in
             primary)
-              package_stem="codex-package"
-              package_entrypoint="codex"
+              package_stem="sofia-package"
+              package_entrypoint="sofia"
               ;;
             app-server)
-              package_stem="codex-app-server-package"
-              package_entrypoint="codex-app-server"
+              package_stem="sofia-app-server-package"
+              package_entrypoint="sofia-app-server"
               ;;
             *)
               echo "Unexpected macOS bundle: ${{ matrix.bundle }}"
@@ -1116,11 +1160,11 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "${packaged_dir}/${package_stem}-${target}.tar.gz" -C "$package_dir"
           verify_signed_binary "${package_dir}/bin/${package_entrypoint}" "$package_entrypoint"
-          verify_signed_binary "${package_dir}/bin/codex-code-mode-host" "codex-code-mode-host"
+          verify_signed_binary "${package_dir}/bin/sofia-code-mode-host" "sofia-code-mode-host"
 
           for resource in \
-            "${package_dir}/codex-path/rg" \
-            "${package_dir}/codex-resources/zsh/bin/zsh"
+            "${package_dir}/sofia-path/rg" \
+            "${package_dir}/sofia-resources/zsh/bin/zsh"
           do
             chmod 0755 "$resource"
             lipo "$resource" -verify_arch "$expected_arch"
@@ -1139,8 +1183,8 @@ jobs:
             exit 0
           fi
 
-          dmg_path="${RUNNER_TEMP}/signed-dmg/codex-${target}.dmg"
-          mount_dir="${RUNNER_TEMP}/codex-dmg-mount-${target}"
+          dmg_path="${RUNNER_TEMP}/signed-dmg/sofia-${target}.dmg"
+          mount_dir="${RUNNER_TEMP}/sofia-dmg-mount-${target}"
           if [[ ! -f "$dmg_path" ]]; then
             echo "Signed DMG $dmg_path not found"
             exit 1
@@ -1164,13 +1208,13 @@ jobs:
 
           cleanup_mount
           trap - EXIT
-          cp "$dmg_path" "dist/${target}/codex-${target}.dmg"
+          cp "$dmg_path" "dist/${target}/sofia-${target}.dmg"
 
       - name: Upload verified macOS artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact_name }}
-          path: codex-rs/dist/${{ matrix.target }}/*
+          path: sofia-rs/dist/${{ matrix.target }}/*
           if-no-files-found: error
 
   build-windows:
@@ -1226,9 +1270,9 @@ jobs:
           ./scripts/stage_npm_packages.py \
             --release-version "$release_version" \
             --artifacts-dir "${GITHUB_WORKSPACE}/dist" \
-            --package codex \
-            --package codex-responses-api-proxy \
-            --package codex-sdk
+            --package sofia \
+            --package sofia-responses-api-proxy \
+            --package sofia-sdk
 
       - name: Upload staged npm packages
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -1308,14 +1352,14 @@ jobs:
       - name: List
         run: ls -R dist/
 
-      - name: Add Codex package checksum manifest
+      - name: Add Sofia package checksum manifest
         run: |
           set -euo pipefail
 
-          manifest="dist/codex-package_SHA256SUMS"
+          manifest="dist/sofia-package_SHA256SUMS"
           tmp_manifest="$(mktemp)"
           find dist -type f \
-            \( -name 'codex-package-*.tar.gz' -o -name 'codex-app-server-package-*.tar.gz' \) \
+            \( -name 'sofia-package-*.tar.gz' -o -name 'sofia-app-server-package-*.tar.gz' \) \
             -print |
             sort |
             while IFS= read -r archive; do
@@ -1324,7 +1368,7 @@ jobs:
             done > "$tmp_manifest"
 
           if [[ ! -s "$tmp_manifest" ]]; then
-            echo "No Codex package archives found for checksum manifest"
+            echo "No Sofia package archives found for checksum manifest"
             exit 1
           fi
 
@@ -1333,7 +1377,7 @@ jobs:
 
       - name: Add config schema release asset
         run: |
-          cp codex-rs/core/config.schema.json dist/config-schema.json
+          cp sofia-rs/core/config.schema.json dist/config-schema.json
 
       - name: Define release name
         id: release_name
@@ -1483,12 +1527,12 @@ jobs:
           tag="$RELEASE_TAG"
           mkdir -p dist/npm
           patterns=(
-            "codex-npm-${version}.tgz"
-            "codex-npm-linux-*-${version}.tgz"
-            "codex-npm-darwin-*-${version}.tgz"
-            "codex-npm-win32-*-${version}.tgz"
-            "codex-responses-api-proxy-npm-${version}.tgz"
-            "codex-sdk-npm-${version}.tgz"
+            "sofia-npm-${version}.tgz"
+            "sofia-npm-linux-*-${version}.tgz"
+            "sofia-npm-darwin-*-${version}.tgz"
+            "sofia-npm-win32-*-${version}.tgz"
+            "sofia-responses-api-proxy-npm-${version}.tgz"
+            "sofia-sdk-npm-${version}.tgz"
           )
           for pattern in "${patterns[@]}"; do
             gh release download "$tag" \
@@ -1509,19 +1553,19 @@ jobs:
             prefix="${NPM_TAG}-"
           fi
 
-          root_tarball="dist/npm/codex-npm-${VERSION}.tgz"
-          sdk_tarball="dist/npm/codex-sdk-npm-${VERSION}.tgz"
-          # Keep this list in sync with CODEX_PLATFORM_PACKAGES in
-          # codex-cli/scripts/build_npm_package.py. The root wrapper advances
-          # @openai/codex@latest as soon as it publishes, so every platform
+          root_tarball="dist/npm/sofia-npm-${VERSION}.tgz"
+          sdk_tarball="dist/npm/sofia-sdk-npm-${VERSION}.tgz"
+          # Keep this list in sync with SOFIA_PLATFORM_PACKAGES in
+          # sofia-cli/scripts/build_npm_package.py. The root wrapper advances
+          # @ruut/sofia@latest as soon as it publishes, so every platform
           # package it aliases must already exist in the registry first.
           platform_tarballs=(
-            "dist/npm/codex-npm-linux-x64-${VERSION}.tgz"
-            "dist/npm/codex-npm-linux-arm64-${VERSION}.tgz"
-            "dist/npm/codex-npm-darwin-x64-${VERSION}.tgz"
-            "dist/npm/codex-npm-darwin-arm64-${VERSION}.tgz"
-            "dist/npm/codex-npm-win32-x64-${VERSION}.tgz"
-            "dist/npm/codex-npm-win32-arm64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-linux-x64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-linux-arm64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-darwin-x64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-darwin-arm64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-win32-x64-${VERSION}.tgz"
+            "dist/npm/sofia-npm-win32-arm64-${VERSION}.tgz"
           )
 
           for required_tarball in "${platform_tarballs[@]}" "${root_tarball}"; do
@@ -1553,7 +1597,7 @@ jobs:
           done
 
           # npm returns HTTP 409 when concurrent publishes update the same
-          # packument. Every platform tarball is a version of @openai/codex,
+          # packument. Every platform tarball is a version of @ruut/sofia,
           # so publish all tarballs serially.
           tarballs=(
             "${platform_tarballs[@]}"
@@ -1570,12 +1614,12 @@ jobs:
             tag=""
 
             case "${filename}" in
-              codex-npm-linux-*-"${VERSION}".tgz|codex-npm-darwin-*-"${VERSION}".tgz|codex-npm-win32-*-"${VERSION}".tgz)
-                platform="${filename#codex-npm-}"
+              sofia-npm-linux-*-"${VERSION}".tgz|sofia-npm-darwin-*-"${VERSION}".tgz|sofia-npm-win32-*-"${VERSION}".tgz)
+                platform="${filename#sofia-npm-}"
                 platform="${platform%-${VERSION}.tgz}"
                 tag="${prefix}${platform}"
                 ;;
-              codex-npm-"${VERSION}".tgz|codex-responses-api-proxy-npm-"${VERSION}".tgz|codex-sdk-npm-"${VERSION}".tgz)
+              sofia-npm-"${VERSION}".tgz|sofia-responses-api-proxy-npm-"${VERSION}".tgz|sofia-sdk-npm-"${VERSION}".tgz)
                 tag="${NPM_TAG}"
                 ;;
               *)
@@ -1628,6 +1672,7 @@ jobs:
 
     steps:
       - name: Trigger developers.openai.com deploy
+        if: ${{ secrets.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL != '' }}
         continue-on-error: true
         env:
           DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.DEV_WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
@@ -1659,13 +1704,14 @@ jobs:
 
     steps:
       - name: Publish to WinGet
+        if: ${{ secrets.WINGET_PUBLISH_PAT != '' }}
         uses: vedantmgoyal9/winget-releaser@7bd472be23763def6e16bd06cc8b1cdfab0e2fd5
         with:
-          identifier: OpenAI.Codex
+          identifier: OpenAI.Sofia
           version: ${{ needs.release.outputs.version }}
           release-tag: ${{ needs.release.outputs.tag }}
           fork-user: openai-oss-forks
-          installers-regex: '^codex-(?:x86_64|aarch64)-pc-windows-msvc\.exe\.zip$'
+          installers-regex: '^sofia-(?:x86_64|aarch64)-pc-windows-msvc\.exe\.zip$'
           token: ${{ secrets.WINGET_PUBLISH_PAT }}
 
   update-branch:

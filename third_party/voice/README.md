@@ -2,7 +2,7 @@
 
 This stage pins and prepares sources for a privately bundled, GStreamer-based
 audio runtime, including its native dependencies and build tools. It does not
-compile native libraries, link them into Codex or enable voice.
+compile native libraries, link them into Sofia or enable voice.
 
 `sources.json` records the versions, URLs and SHA-256 digests of 11 archives:
 
@@ -64,7 +64,7 @@ Consumers must restrict `PKG_CONFIG_LIBDIR` to the SDK, clear `PKG_CONFIG_PATH`,
 and use `pkg-config --define-prefix` for libffi/PCRE2/zlib metadata too. Only the
 required native metadata is exported; capture Opus uses `opusic-sys`. Native
 library loader paths are not changed by SDK export. These build inputs do not replace the
-separate runtime projection and are never copied into users' Codex packages.
+separate runtime projection and are never copied into users' Sofia packages.
 Final helper linkage and moved-package execution remain separate integration
 work; exporting an SDK does not enable voice.
 
@@ -159,7 +159,7 @@ with pkg-config restricted to this prefix. Only system ABI libraries/frameworks
 may remain external; runtime closure inspection must verify that independently.
 `//third_party/voice:build_inputs` exposes the recipe and source inputs to Bazel.
 Neither this filegroup nor a successful prefix build proves final Cargo/Bazel
-linkage, safe private runtime loading, or an installed voice-capable Codex package.
+linkage, safe private runtime loading, or an installed voice-capable Sofia package.
 
 ## Private macOS runtime projection
 
@@ -277,7 +277,7 @@ Python and pkgconf match the native architecture. Complete support, include and
 library files are declared, and installed entrypoints must match the supplied
 target/architecture manifest and belong to that declared tree. This does not
 turn caller-provided files into authenticated inputs: provisioning retains that
-responsibility. These build tools must never enter shipped Codex packages.
+responsibility. These build tools must never enter shipped Sofia packages.
 
 Windows link inputs pair SDK import libraries with the corresponding prepared
 DLLs. DLLs, plugins and the receipt remain under the normal native-link runfiles

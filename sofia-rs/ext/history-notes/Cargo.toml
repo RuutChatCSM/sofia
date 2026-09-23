@@ -1,0 +1,36 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-history-notes-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_history_notes_extension"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-analytics = { workspace = true }
+sofia-api = { workspace = true }
+sofia-client = { workspace = true }
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-output-truncation = { workspace = true }
+http = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+sofia-config = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+core_test_support = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock = { workspace = true }

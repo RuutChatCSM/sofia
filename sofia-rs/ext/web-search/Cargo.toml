@@ -1,0 +1,32 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-web-search-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_web_search_extension"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-api = { workspace = true }
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-extension-items = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-tools = { workspace = true }
+http = { workspace = true }
+schemars = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

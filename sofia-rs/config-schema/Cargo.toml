@@ -1,0 +1,17 @@
+[package]
+name = "sofia-config-schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sofia-write-config-schema"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+sofia-config = { workspace = true }

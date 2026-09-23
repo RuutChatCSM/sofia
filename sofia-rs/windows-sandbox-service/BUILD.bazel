@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "windows-sandbox-service",
+    binary_test_target_compatible_with = ["@platforms//os:windows"],
+    crate_name = "sofia_windows_sandbox_service",
+)

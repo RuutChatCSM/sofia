@@ -1,0 +1,40 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-guardian-v2"
+version.workspace = true
+
+[lib]
+name = "sofia_guardian_v2"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-analytics = { workspace = true }
+sofia-api = { workspace = true }
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-features = { workspace = true }
+sofia-guardian-context = { workspace = true }
+sofia-history = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-protocol = { workspace = true }
+dirs = { workspace = true }
+http = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+core_test_support = { workspace = true }
+pretty_assertions = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "guardian-context",
+    crate_name = "sofia_guardian_context",
+)

@@ -2,21 +2,21 @@
 
 set -eu
 
-RELEASE="${CODEX_RELEASE:-latest}"
+RELEASE="${SOFIA_RELEASE:-latest}"
 NON_INTERACTIVE="${CODEX_NON_INTERACTIVE:-false}"
-DEFAULT_PREFER_RELEASES_OPENAI_COM="true"
-PREFER_RELEASES_OPENAI_COM="${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
-RELEASES_BASE_URL="https://releases.openai.com/codex"
+DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
+PREFER_RELEASES_OPENAI_COM="${SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
+RELEASES_BASE_URL="https://releases.openai.com/sofia"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
 RELEASES_ASSET_TIMEOUT=300
 release_source="github"
 
-BIN_DIR="${CODEX_INSTALL_DIR:-$HOME/.local/bin}"
-BIN_PATH="$BIN_DIR/codex"
-CODE_MODE_HOST_BIN_PATH="$BIN_DIR/codex-code-mode-host"
-CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
-STANDALONE_ROOT="$CODEX_HOME_DIR/packages/standalone"
+BIN_DIR="${SOFIA_INSTALL_DIR:-$HOME/.local/bin}"
+BIN_PATH="$BIN_DIR/sofia"
+CODE_MODE_HOST_BIN_PATH="$BIN_DIR/sofia-code-mode-host"
+SOFIA_HOME_DIR="${SOFIA_HOME:-$HOME/.sofia}"
+STANDALONE_ROOT="$SOFIA_HOME_DIR/packages/standalone"
 RELEASES_DIR="$STANDALONE_ROOT/releases"
 CURRENT_LINK="$STANDALONE_ROOT/current"
 AUTO_UPDATE_VERSION="$STANDALONE_ROOT/auto-update-version"
@@ -64,7 +64,7 @@ validate_version() {
   fi
 
   if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-alpha(\.[0-9]+){0,2}|-beta(\.[0-9]+)?)?$'; then
-    echo "Invalid Codex release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
+    echo "Invalid Sofia release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
     return 1
   fi
 }
@@ -85,9 +85,9 @@ parse_args() {
 Usage: install.sh [--release VERSION]
 
 Environment:
-  CODEX_RELEASE          Version to install; overridden by --release.
+  SOFIA_RELEASE          Version to install; overridden by --release.
   CODEX_NON_INTERACTIVE  Set to 1, true, or yes to skip prompts.
-  CODEX_INSTALLER_USE_RELEASES_OPENAI_COM
+  SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM
                          Set to 0, false, or no to use GitHub Releases.
 EOF
         exit 0
@@ -129,7 +129,7 @@ download_file() {
     return
   fi
 
-  echo "curl or wget is required to install Codex." >&2
+  echo "curl or wget is required to install Sofia." >&2
   exit 1
 }
 
@@ -160,7 +160,7 @@ download_text() {
     return
   fi
 
-  echo "curl or wget is required to install Codex." >&2
+  echo "curl or wget is required to install Sofia." >&2
   exit 1
 }
 
@@ -308,7 +308,7 @@ release_url_for_asset() {
   asset="$1"
   resolved_version="$2"
 
-  printf 'https://github.com/openai/codex/releases/download/rust-v%s/%s\n' "$resolved_version" "$asset"
+  printf 'https://github.com/RuutChatCSM/sofia/releases/download/rust-v%s/%s\n' "$resolved_version" "$asset"
 }
 
 releases_url_for_asset() {
@@ -321,14 +321,14 @@ releases_url_for_asset() {
 release_metadata_url() {
   resolved_version="$1"
 
-  printf 'https://api.github.com/repos/openai/codex/releases/tags/rust-v%s\n' "$resolved_version"
+  printf 'https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/rust-v%s\n' "$resolved_version"
 }
 
 parse_downloaded_release_metadata() {
   requested_release="$1"
   source_name="$2"
   if ! release_metadata="$(printf '%s\n' "$release_json" | parse_release_metadata)"; then
-    echo "Could not parse $source_name release metadata for Codex $requested_release." >&2
+    echo "Could not parse $source_name release metadata for Sofia $requested_release." >&2
     return 1
   fi
 }
@@ -340,7 +340,7 @@ resolve_metadata_version() {
     *) metadata_version="" ;;
   esac
   if [ -z "$metadata_version" ]; then
-    echo "Failed to resolve the latest Codex release version." >&2
+    echo "Failed to resolve the latest Sofia release version." >&2
     return 1
   fi
   validate_version "$metadata_version"
@@ -350,7 +350,7 @@ resolve_release_from_github() {
   normalized_version="$1"
   if [ "$normalized_version" = "latest" ]; then
     requested_release="latest"
-    metadata_url="https://api.github.com/repos/openai/codex/releases/latest"
+    metadata_url="https://api.github.com/repos/RuutChatCSM/sofia/releases/latest"
   else
     resolved_version="$normalized_version"
     requested_release="$resolved_version"
@@ -358,7 +358,7 @@ resolve_release_from_github() {
   fi
 
   if ! release_json="$(download_text "$metadata_url")"; then
-    echo "Could not fetch GitHub release metadata for Codex $requested_release. GitHub API may be unavailable or rate limited." >&2
+    echo "Could not fetch GitHub release metadata for Sofia $requested_release. GitHub API may be unavailable or rate limited." >&2
     exit 1
   fi
 
@@ -394,7 +394,7 @@ resolve_release_from_releases() {
     return 1
   fi
   if [ "$normalized_version" != "latest" ] && [ "$metadata_version" != "$normalized_version" ]; then
-    echo "Release metadata version did not match requested Codex version $normalized_version." >&2
+    echo "Release metadata version did not match requested Sofia version $normalized_version." >&2
     return 1
   fi
   resolved_version="$metadata_version"
@@ -462,8 +462,8 @@ release_asset_digest() {
 }
 
 select_release_assets() {
-  package_asset="codex-package-$vendor_target.tar.gz"
-  checksum_asset="codex-package_SHA256SUMS"
+  package_asset="sofia-package-$vendor_target.tar.gz"
+  checksum_asset="sofia-package_SHA256SUMS"
   download_fallback_url=""
   checksum_fallback_url=""
 
@@ -471,11 +471,11 @@ select_release_assets() {
     release_asset_exists "$checksum_asset"; then
     install_layout="package"
     asset="$package_asset"
-  elif release_asset_exists "codex-npm-$npm_tag-$resolved_version.tgz"; then
+  elif release_asset_exists "sofia-npm-$npm_tag-$resolved_version.tgz"; then
     install_layout="legacy-platform-npm"
-    asset="codex-npm-$npm_tag-$resolved_version.tgz"
+    asset="sofia-npm-$npm_tag-$resolved_version.tgz"
   else
-    echo "Could not find Codex package or platform npm release assets for Codex $resolved_version." >&2
+    echo "Could not find Sofia package or platform npm release assets for Sofia $resolved_version." >&2
     return 1
   fi
 
@@ -512,7 +512,7 @@ package_archive_digest() {
   ' "$manifest_path" 2>/dev/null || true)"
 
   if [ -z "$digest" ]; then
-    echo "Could not find SHA-256 digest for $asset in codex-package_SHA256SUMS." >&2
+    echo "Could not find SHA-256 digest for $asset in sofia-package_SHA256SUMS." >&2
     return 1
   fi
 
@@ -537,7 +537,7 @@ file_sha256() {
     return
   fi
 
-  echo "sha256sum, shasum, or openssl is required to verify the Codex download." >&2
+  echo "sha256sum, shasum, or openssl is required to verify the Sofia download." >&2
   exit 1
 }
 
@@ -547,7 +547,7 @@ verify_archive_digest() {
   actual_digest="$(file_sha256 "$archive_path")"
 
   if [ "$actual_digest" != "$expected_digest" ]; then
-    echo "Downloaded Codex archive checksum did not match expected digest." >&2
+    echo "Downloaded Sofia archive checksum did not match expected digest." >&2
     echo "expected: $expected_digest" >&2
     echo "actual:   $actual_digest" >&2
     return 1
@@ -556,7 +556,7 @@ verify_archive_digest() {
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "$1 is required to install Codex." >&2
+    echo "$1 is required to install Sofia." >&2
     exit 1
   fi
 }
@@ -597,8 +597,8 @@ add_to_path() {
 
   profile="$(pick_profile)"
   path_profile="$profile"
-  begin_marker="# >>> Codex installer >>>"
-  end_marker="# <<< Codex installer <<<"
+  begin_marker="# >>> Sofia installer >>>"
+  end_marker="# <<< Sofia installer <<<"
   path_line="export PATH=\"$BIN_DIR:\$PATH\""
 
   if [ -f "$profile" ] && grep -F "$begin_marker" "$profile" >/dev/null 2>&1; then
@@ -743,7 +743,7 @@ cleanup_stale_install_artifacts() {
   find "$STANDALONE_ROOT" -mindepth 1 -maxdepth 1 -name '.current.*' -exec rm -f {} +
 
   if [ -d "$BIN_DIR" ]; then
-    find "$BIN_DIR" -mindepth 1 -maxdepth 1 -name '.codex.*' -exec rm -f {} +
+    find "$BIN_DIR" -mindepth 1 -maxdepth 1 -name '.sofia.*' -exec rm -f {} +
   fi
 }
 
@@ -768,23 +768,23 @@ replace_path_with_symlink() {
 }
 
 version_from_binary() {
-  codex_path="$1"
+  sofia_path="$1"
 
-  if [ ! -x "$codex_path" ]; then
+  if [ ! -x "$sofia_path" ]; then
     return 1
   fi
 
-  "$codex_path" --version 2>/dev/null | sed -n 's/.* \([0-9][0-9A-Za-z.+-]*\)$/\1/p' | head -n 1
+  "$sofia_path" --version 2>/dev/null | sed -n 's/.* \([0-9][0-9A-Za-z.+-]*\)$/\1/p' | head -n 1
 }
 
 current_installed_version() {
-  version="$(version_from_binary "$CURRENT_LINK/bin/codex" || true)"
+  version="$(version_from_binary "$CURRENT_LINK/bin/sofia" || true)"
   if [ -n "$version" ]; then
     printf '%s\n' "$version"
     return 0
   fi
 
-  version="$(version_from_binary "$CURRENT_LINK/codex" || true)"
+  version="$(version_from_binary "$CURRENT_LINK/sofia" || true)"
   if [ -n "$version" ]; then
     printf '%s\n' "$version"
     return 0
@@ -794,7 +794,7 @@ current_installed_version() {
 }
 
 resolve_existing_codex() {
-  command -v codex 2>/dev/null || true
+  command -v sofia 2>/dev/null || true
 }
 
 classify_existing_codex() {
@@ -864,30 +864,30 @@ prompt_yes_no() {
 print_launch_instructions() {
   case "$path_action" in
     added)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && codex"
-      step "Future terminals: open a new terminal and run: codex"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && sofia"
+      step "Future terminals: open a new terminal and run: sofia"
       step "PATH was added to $path_profile"
       ;;
     updated)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && codex"
-      step "Future terminals: open a new terminal and run: codex"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && sofia"
+      step "Future terminals: open a new terminal and run: sofia"
       step "PATH was updated in $path_profile"
       ;;
     configured)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && codex"
-      step "Future terminals: open a new terminal and run: codex"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && sofia"
+      step "Future terminals: open a new terminal and run: sofia"
       step "PATH is already configured in $path_profile"
       ;;
     *)
-      step "Current terminal: codex"
-      step "Future terminals: open a new terminal and run: codex"
+      step "Current terminal: sofia"
+      step "Future terminals: open a new terminal and run: sofia"
       ;;
   esac
 }
 
 maybe_launch_codex_now() {
-  if prompt_yes_no "Start Codex now?"; then
-    step "Launching Codex"
+  if prompt_yes_no "Start Sofia now?"; then
+    step "Launching Sofia"
     "$BIN_PATH"
   fi
 }
@@ -902,8 +902,8 @@ detect_conflicting_install() {
 
   conflict_manager="$manager"
   conflict_path="$existing_path"
-  step "Detected existing $manager-managed Codex at $existing_path"
-  warn "Multiple managed Codex installs can be ambiguous because PATH order decides which one runs."
+  step "Detected existing $manager-managed Sofia at $existing_path"
+  warn "Multiple managed Sofia installs can be ambiguous because PATH order decides which one runs."
 }
 
 handle_conflicting_install() {
@@ -913,23 +913,23 @@ handle_conflicting_install() {
 
   case "$conflict_manager" in
     brew)
-      uninstall_cmd="brew uninstall --cask codex"
+      uninstall_cmd="brew uninstall --cask sofia"
       ;;
     bun)
-      uninstall_cmd="bun remove -g @openai/codex"
+      uninstall_cmd="bun remove -g @ruut/sofia"
       ;;
     *)
-      uninstall_cmd="npm uninstall -g @openai/codex"
+      uninstall_cmd="npm uninstall -g @ruut/sofia"
       ;;
   esac
 
-  if prompt_yes_no "Uninstall the existing $conflict_manager-managed Codex now?"; then
+  if prompt_yes_no "Uninstall the existing $conflict_manager-managed Sofia now?"; then
     step "Running: $uninstall_cmd"
     if ! sh -c "$uninstall_cmd"; then
-      warn "Failed to uninstall the existing $conflict_manager-managed Codex. Continuing with the standalone install."
+      warn "Failed to uninstall the existing $conflict_manager-managed Sofia. Continuing with the standalone install."
     fi
   else
-    warn "Leaving the existing $conflict_manager-managed Codex installed. PATH order will determine which codex runs."
+    warn "Leaving the existing $conflict_manager-managed Sofia installed. PATH order will determine which sofia runs."
   fi
 }
 
@@ -943,13 +943,13 @@ install_package_release() {
   mkdir -p "$stage_release"
   tar -xzf "$archive_path" -C "$stage_release"
   chmod 0755 \
-    "$stage_release/bin/codex" \
-    "$stage_release/bin/codex-code-mode-host" \
-    "$stage_release/codex-path/rg"
-  if [ -f "$stage_release/codex-resources/bwrap" ]; then
-    chmod 0755 "$stage_release/codex-resources/bwrap"
+    "$stage_release/bin/sofia" \
+    "$stage_release/bin/sofia-code-mode-host" \
+    "$stage_release/sofia-path/rg"
+  if [ -f "$stage_release/sofia-resources/bwrap" ]; then
+    chmod 0755 "$stage_release/sofia-resources/bwrap"
   fi
-  ln -sf "bin/codex" "$stage_release/codex"
+  ln -sf "bin/sofia" "$stage_release/sofia"
 
   if [ -e "$release_dir" ] || [ -L "$release_dir" ]; then
     rm -rf "$release_dir"
@@ -967,15 +967,15 @@ install_legacy_platform_npm_release() {
 
   mkdir -p "$RELEASES_DIR"
   rm -rf "$stage_release" "$extract_dir"
-  mkdir -p "$stage_release/codex-resources" "$extract_dir"
+  mkdir -p "$stage_release/sofia-resources" "$extract_dir"
   tar -xzf "$archive_path" -C "$extract_dir"
 
-  cp "$vendor_root/codex/codex" "$stage_release/codex"
-  cp "$vendor_root/path/rg" "$stage_release/codex-resources/rg"
-  chmod 0755 "$stage_release/codex" "$stage_release/codex-resources/rg"
-  if [ -f "$vendor_root/codex-resources/bwrap" ]; then
-    cp "$vendor_root/codex-resources/bwrap" "$stage_release/codex-resources/bwrap"
-    chmod 0755 "$stage_release/codex-resources/bwrap"
+  cp "$vendor_root/sofia/sofia" "$stage_release/sofia"
+  cp "$vendor_root/path/rg" "$stage_release/sofia-resources/rg"
+  chmod 0755 "$stage_release/sofia" "$stage_release/sofia-resources/rg"
+  if [ -f "$vendor_root/sofia-resources/bwrap" ]; then
+    cp "$vendor_root/sofia-resources/bwrap" "$stage_release/sofia-resources/bwrap"
+    chmod 0755 "$stage_release/sofia-resources/bwrap"
   fi
 
   if [ -e "$release_dir" ] || [ -L "$release_dir" ]; then
@@ -996,16 +996,16 @@ release_dir_is_complete() {
 
   case "$layout" in
     package)
-      [ -f "$release_dir/codex-package.json" ] &&
-        [ -x "$release_dir/bin/codex" ] &&
-        [ -x "$release_dir/bin/codex-code-mode-host" ] &&
-        [ -x "$release_dir/codex" ] &&
-        [ -x "$release_dir/codex-path/rg" ] ||
+      [ -f "$release_dir/sofia-package.json" ] &&
+        [ -x "$release_dir/bin/sofia" ] &&
+        [ -x "$release_dir/bin/sofia-code-mode-host" ] &&
+        [ -x "$release_dir/sofia" ] &&
+        [ -x "$release_dir/sofia-path/rg" ] ||
         return 1
       ;;
     legacy-platform-npm)
-      [ -x "$release_dir/codex" ] &&
-        [ -x "$release_dir/codex-resources/rg" ] ||
+      [ -x "$release_dir/sofia" ] &&
+        [ -x "$release_dir/sofia-resources/rg" ] ||
         return 1
       ;;
     *)
@@ -1015,11 +1015,11 @@ release_dir_is_complete() {
 
   case "$layout:$expected_target" in
     package:*linux* | legacy-platform-npm:*linux*)
-      [ -x "$release_dir/codex-resources/bwrap" ] || return 1
+      [ -x "$release_dir/sofia-resources/bwrap" ] || return 1
       ;;
   esac
 
-  installed_version="$(version_from_binary "$release_dir/bin/codex" || version_from_binary "$release_dir/codex" || true)"
+  installed_version="$(version_from_binary "$release_dir/bin/sofia" || version_from_binary "$release_dir/sofia" || true)"
   [ "$installed_version" = "$expected_version" ]
 }
 
@@ -1033,28 +1033,28 @@ update_current_link() {
 release_codex_relative_path() {
   release_dir="$1"
 
-  if [ -x "$release_dir/bin/codex" ]; then
-    printf 'bin/codex\n'
+  if [ -x "$release_dir/bin/sofia" ]; then
+    printf 'bin/sofia\n'
   else
-    printf 'codex\n'
+    printf 'sofia\n'
   fi
 }
 
 update_visible_command() {
   release_dir="$1"
   mkdir -p "$BIN_DIR"
-  tmp_link="$BIN_DIR/.codex.$$"
-  codex_relative_path="$(release_codex_relative_path "$release_dir")"
+  tmp_link="$BIN_DIR/.sofia.$$"
+  sofia_relative_path="$(release_codex_relative_path "$release_dir")"
 
-  replace_path_with_symlink "$BIN_PATH" "$CURRENT_LINK/$codex_relative_path" "$tmp_link"
+  replace_path_with_symlink "$BIN_PATH" "$CURRENT_LINK/$sofia_relative_path" "$tmp_link"
 
-  if [ "$os" = "darwin" ] && [ -x "$release_dir/bin/codex-code-mode-host" ]; then
+  if [ "$os" = "darwin" ] && [ -x "$release_dir/bin/sofia-code-mode-host" ]; then
     replace_path_with_symlink \
       "$CODE_MODE_HOST_BIN_PATH" \
-      "$CURRENT_LINK/bin/codex-code-mode-host" \
+      "$CURRENT_LINK/bin/sofia-code-mode-host" \
       "$tmp_link"
   elif [ "$(readlink "$CODE_MODE_HOST_BIN_PATH" 2>/dev/null || true)" = \
-    "$CURRENT_LINK/bin/codex-code-mode-host" ]; then
+    "$CURRENT_LINK/bin/sofia-code-mode-host" ]; then
     rm -f "$CODE_MODE_HOST_BIN_PATH"
   fi
 }
@@ -1131,11 +1131,11 @@ release_dir="$RELEASES_DIR/$release_name"
 current_version="$(current_installed_version)"
 
 if [ -n "$current_version" ] && [ "$current_version" != "$resolved_version" ]; then
-  step "Updating Codex CLI from $current_version to $resolved_version"
+  step "Updating Sofia CLI from $current_version to $resolved_version"
 elif [ -n "$current_version" ]; then
-  step "Updating Codex CLI"
+  step "Updating Sofia CLI"
 else
-  step "Installing Codex CLI"
+  step "Installing Sofia CLI"
 fi
 step "Detected platform: $platform_label"
 step "Resolved version: $resolved_version"
@@ -1154,9 +1154,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 acquire_install_lock
-updater_record="$CODEX_HOME_DIR/app-server-daemon/app-server-updater.pid"
+updater_record="$SOFIA_HOME_DIR/app-server-daemon/app-server-updater.pid"
 old_updater_parent="false"
-if [ "${CODEX_INSTALL_IF_LATEST:-}" != "1" ] && [ -f "$updater_record" ]; then
+if [ "${SOFIA_INSTALL_IF_LATEST:-}" != "1" ] && [ -f "$updater_record" ]; then
   updater_pid="$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$updater_record" | head -n 1)"
   recorded_start="$(sed -n 's/.*"processStartTime"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$updater_record" | head -n 1)"
   if [ -r "/proc/$$/stat" ]; then
@@ -1180,8 +1180,8 @@ if [ "${CODEX_INSTALL_IF_LATEST:-}" != "1" ] && [ -f "$updater_record" ]; then
     exit 0
   fi
 fi
-if [ "${CODEX_INSTALL_IF_LATEST:-}" = "1" ] || [ "$old_updater_parent" = "true" ]; then
-  guarded_release="${CODEX_UPDATE_FROM_RELEASE:-}"
+if [ "${SOFIA_INSTALL_IF_LATEST:-}" = "1" ] || [ "$old_updater_parent" = "true" ]; then
+  guarded_release="${SOFIA_UPDATE_FROM_RELEASE:-}"
   if [ "$old_updater_parent" = "true" ]; then
     guarded_release="$(cat "$AUTO_UPDATE_VERSION" 2>/dev/null || true)"
   fi
@@ -1203,7 +1203,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   archive_path="$tmp_dir/$asset"
   checksum_path="$tmp_dir/$checksum_asset"
 
-  step "Downloading Codex CLI"
+  step "Downloading Sofia CLI"
   if [ "$install_layout" = "package" ]; then
     checksum_digest="$(release_asset_digest "$checksum_asset")"
     download_file_with_fallback "$checksum_url" "$checksum_fallback_url" "$checksum_path" "$checksum_digest" "$checksum_asset" "$asset"
@@ -1221,7 +1221,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   fi
 fi
 if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target" "$install_layout"; then
-  echo "Installed Codex command did not report expected version $resolved_version." >&2
+  echo "Installed Sofia command did not report expected version $resolved_version." >&2
   exit 1
 fi
 update_current_link "$release_dir"
@@ -1253,5 +1253,5 @@ case "$path_action" in
     ;;
 esac
 
-printf 'Codex CLI %s installed successfully.\n' "$resolved_version"
+printf 'Sofia CLI %s installed successfully.\n' "$resolved_version"
 maybe_launch_codex_now

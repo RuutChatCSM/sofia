@@ -15,13 +15,13 @@ from openai_codex import AsyncCodex
 
 
 async def main() -> None:
-    async with AsyncCodex(config=runtime_config()) as codex:
+    async with AsyncCodex(config=runtime_config()) as sofia:
         # Browser login returns a live handle. Open `auth_url` and await `wait()`
         # in a real app; this example cancels immediately so it stays non-blocking.
-        login = await codex.login_chatgpt()
+        login = await sofia.login_chatgpt()
         canceled = await login.cancel()
         completed = await login.wait()
-        account = await codex.account()
+        account = await sofia.account()
 
         print("login.id:", login.login_id)
         print("login.auth_url:", login.auth_url)

@@ -1,0 +1,18 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-utils-output-truncation"
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-protocol = { workspace = true }
+sofia-utils-string = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lib]
+doctest = false

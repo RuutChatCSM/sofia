@@ -1,0 +1,23 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-utils-audio"
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-cache = { workspace = true }
+sofia-utils-string = { workspace = true }
+symphonia = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lib]
+doctest = false

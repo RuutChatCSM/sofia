@@ -1,0 +1,25 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-git-attribution"
+version.workspace = true
+
+[lib]
+name = "sofia_git_attribution"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-backend-client = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-http-client = { workspace = true }
+sofia-login = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock = { workspace = true }

@@ -31,10 +31,10 @@ def _format_usage(usage: object) -> str:
 
 
 async def main() -> None:
-    print("Codex async mini CLI. Type /exit to quit.")
+    print("Sofia async mini CLI. Type /exit to quit.")
 
-    async with AsyncCodex(config=runtime_config()) as codex:
-        thread = await codex.thread_start(
+    async with AsyncCodex(config=runtime_config()) as sofia:
+        thread = await sofia.thread_start(
             model="gpt-5.4", config={"model_reasoning_effort": "high"}
         )
         print("Thread:", thread.id)

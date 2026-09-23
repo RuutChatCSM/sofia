@@ -31,7 +31,7 @@ if ((Test-Path "D:\") -and (Test-DevDrive "D:")) {
     }
 
     try {
-        $VhdPath = Join-Path $env:RUNNER_TEMP "codex-dev-drive.vhdx"
+        $VhdPath = Join-Path $env:RUNNER_TEMP "sofia-dev-drive.vhdx"
         $SizeBytes = 64GB
 
         if (Test-Path $VhdPath) {

@@ -1,0 +1,42 @@
+[package]
+name = "sofia-external-agent-migration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_external_agent_migration"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+sofia-analytics = { workspace = true }
+sofia-config = { workspace = true }
+sofia-core = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-hooks = { workspace = true }
+sofia-login = { workspace = true }
+sofia-memories-write = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-thread-store = { workspace = true }
+sofia-utils-output-truncation = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+toml = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+sofia-app-server-protocol = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

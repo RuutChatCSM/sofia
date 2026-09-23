@@ -1,0 +1,22 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-attachment-store"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_attachment_store"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-utils-image = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+base64 = { workspace = true }
+pretty_assertions = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

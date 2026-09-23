@@ -1,86 +1,86 @@
 {
   "outputs": {
-    "codex": {
+    "sofia": {
       "platforms": {
         "macos-aarch64": {
-          "regex": "^codex-package-aarch64-apple-darwin\\.tar\\.zst$",
-          "path": "bin/codex"
+          "regex": "^sofia-package-aarch64-apple-darwin\\.tar\\.zst$",
+          "path": "bin/sofia"
         },
         "macos-x86_64": {
-          "regex": "^codex-package-x86_64-apple-darwin\\.tar\\.zst$",
-          "path": "bin/codex"
+          "regex": "^sofia-package-x86_64-apple-darwin\\.tar\\.zst$",
+          "path": "bin/sofia"
         },
         "linux-x86_64": {
-          "regex": "^codex-package-x86_64-unknown-linux-musl\\.tar\\.zst$",
-          "path": "bin/codex"
+          "regex": "^sofia-package-x86_64-unknown-linux-musl\\.tar\\.zst$",
+          "path": "bin/sofia"
         },
         "linux-aarch64": {
-          "regex": "^codex-package-aarch64-unknown-linux-musl\\.tar\\.zst$",
-          "path": "bin/codex"
+          "regex": "^sofia-package-aarch64-unknown-linux-musl\\.tar\\.zst$",
+          "path": "bin/sofia"
         },
         "windows-x86_64": {
-          "regex": "^codex-package-x86_64-pc-windows-msvc\\.tar\\.zst$",
-          "path": "bin/codex.exe"
+          "regex": "^sofia-package-x86_64-pc-windows-msvc\\.tar\\.zst$",
+          "path": "bin/sofia.exe"
         },
         "windows-aarch64": {
-          "regex": "^codex-package-aarch64-pc-windows-msvc\\.tar\\.zst$",
-          "path": "bin/codex.exe"
+          "regex": "^sofia-package-aarch64-pc-windows-msvc\\.tar\\.zst$",
+          "path": "bin/sofia.exe"
         }
       }
     },
-    "codex-app-server": {
+    "sofia-app-server": {
       "platforms": {
         "macos-aarch64": {
-          "regex": "^codex-app-server-package-aarch64-apple-darwin\\.tar\\.zst$",
-          "path": "bin/codex-app-server"
+          "regex": "^sofia-app-server-package-aarch64-apple-darwin\\.tar\\.zst$",
+          "path": "bin/sofia-app-server"
         },
         "macos-x86_64": {
-          "regex": "^codex-app-server-package-x86_64-apple-darwin\\.tar\\.zst$",
-          "path": "bin/codex-app-server"
+          "regex": "^sofia-app-server-package-x86_64-apple-darwin\\.tar\\.zst$",
+          "path": "bin/sofia-app-server"
         },
         "linux-x86_64": {
-          "regex": "^codex-app-server-package-x86_64-unknown-linux-musl\\.tar\\.zst$",
-          "path": "bin/codex-app-server"
+          "regex": "^sofia-app-server-package-x86_64-unknown-linux-musl\\.tar\\.zst$",
+          "path": "bin/sofia-app-server"
         },
         "linux-aarch64": {
-          "regex": "^codex-app-server-package-aarch64-unknown-linux-musl\\.tar\\.zst$",
-          "path": "bin/codex-app-server"
+          "regex": "^sofia-app-server-package-aarch64-unknown-linux-musl\\.tar\\.zst$",
+          "path": "bin/sofia-app-server"
         },
         "windows-x86_64": {
-          "regex": "^codex-app-server-package-x86_64-pc-windows-msvc\\.tar\\.zst$",
-          "path": "bin/codex-app-server.exe"
+          "regex": "^sofia-app-server-package-x86_64-pc-windows-msvc\\.tar\\.zst$",
+          "path": "bin/sofia-app-server.exe"
         },
         "windows-aarch64": {
-          "regex": "^codex-app-server-package-aarch64-pc-windows-msvc\\.tar\\.zst$",
-          "path": "bin/codex-app-server.exe"
+          "regex": "^sofia-app-server-package-aarch64-pc-windows-msvc\\.tar\\.zst$",
+          "path": "bin/sofia-app-server.exe"
         }
       }
     },
-    "codex-responses-api-proxy": {
+    "sofia-responses-api-proxy": {
       "platforms": {
         "macos-aarch64": {
-          "regex": "^codex-responses-api-proxy-aarch64-apple-darwin\\.zst$",
-          "path": "codex-responses-api-proxy"
+          "regex": "^sofia-responses-api-proxy-aarch64-apple-darwin\\.zst$",
+          "path": "sofia-responses-api-proxy"
         },
         "macos-x86_64": {
-          "regex": "^codex-responses-api-proxy-x86_64-apple-darwin\\.zst$",
-          "path": "codex-responses-api-proxy"
+          "regex": "^sofia-responses-api-proxy-x86_64-apple-darwin\\.zst$",
+          "path": "sofia-responses-api-proxy"
         },
         "linux-x86_64": {
-          "regex": "^codex-responses-api-proxy-x86_64-unknown-linux-musl\\.zst$",
-          "path": "codex-responses-api-proxy"
+          "regex": "^sofia-responses-api-proxy-x86_64-unknown-linux-musl\\.zst$",
+          "path": "sofia-responses-api-proxy"
         },
         "linux-aarch64": {
-          "regex": "^codex-responses-api-proxy-aarch64-unknown-linux-musl\\.zst$",
-          "path": "codex-responses-api-proxy"
+          "regex": "^sofia-responses-api-proxy-aarch64-unknown-linux-musl\\.zst$",
+          "path": "sofia-responses-api-proxy"
         },
         "windows-x86_64": {
-          "regex": "^codex-responses-api-proxy-x86_64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-responses-api-proxy.exe"
+          "regex": "^sofia-responses-api-proxy-x86_64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-responses-api-proxy.exe"
         },
         "windows-aarch64": {
-          "regex": "^codex-responses-api-proxy-aarch64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-responses-api-proxy.exe"
+          "regex": "^sofia-responses-api-proxy-aarch64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-responses-api-proxy.exe"
         }
       }
     },
@@ -96,27 +96,27 @@
         }
       }
     },
-    "codex-command-runner": {
+    "sofia-command-runner": {
       "platforms": {
         "windows-x86_64": {
-          "regex": "^codex-command-runner-x86_64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-command-runner.exe"
+          "regex": "^sofia-command-runner-x86_64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-command-runner.exe"
         },
         "windows-aarch64": {
-          "regex": "^codex-command-runner-aarch64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-command-runner.exe"
+          "regex": "^sofia-command-runner-aarch64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-command-runner.exe"
         }
       }
     },
-    "codex-windows-sandbox-setup": {
+    "sofia-windows-sandbox-setup": {
       "platforms": {
         "windows-x86_64": {
-          "regex": "^codex-windows-sandbox-setup-x86_64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-windows-sandbox-setup.exe"
+          "regex": "^sofia-windows-sandbox-setup-x86_64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-windows-sandbox-setup.exe"
         },
         "windows-aarch64": {
-          "regex": "^codex-windows-sandbox-setup-aarch64-pc-windows-msvc\\.exe\\.zst$",
-          "path": "codex-windows-sandbox-setup.exe"
+          "regex": "^sofia-windows-sandbox-setup-aarch64-pc-windows-msvc\\.exe\\.zst$",
+          "path": "sofia-windows-sandbox-setup.exe"
         }
       }
     }

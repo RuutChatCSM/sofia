@@ -14,9 +14,9 @@ from openai_codex import (
     AsyncCodex,
     AsyncThread,
     AsyncTurnHandle,
-    Codex,
     CodexConfig,
     Sandbox,
+    Sofia,
     Thread,
     TurnHandle,
     TurnResult,
@@ -27,7 +27,7 @@ from openai_codex.types import InitializeResponse
 EXPECTED_ROOT_EXPORTS = [
     "__version__",
     "CodexConfig",
-    "Codex",
+    "Sofia",
     "AsyncCodex",
     "ApprovalMode",
     "Sandbox",
@@ -215,7 +215,7 @@ def test_curated_public_api_has_builtin_help_documentation() -> None:
     """The package's normal ``help()`` surface should explain common first-use APIs."""
     documented = {
         "module": openai_codex,
-        "Codex": Codex,
+        "Sofia": Sofia,
         "AsyncCodex": AsyncCodex,
         "CodexConfig": CodexConfig,
         "Thread": Thread,
@@ -224,8 +224,8 @@ def test_curated_public_api_has_builtin_help_documentation() -> None:
         "AsyncTurnHandle": AsyncTurnHandle,
         "TurnResult": TurnResult,
         "Sandbox": Sandbox,
-        "thread_start": Codex.thread_start,
-        "thread_resume": Codex.thread_resume,
+        "thread_start": Sofia.thread_start,
+        "thread_resume": Sofia.thread_resume,
         "thread_run": Thread.run,
         "thread_turn": Thread.turn,
     }
@@ -276,7 +276,7 @@ def test_package_star_import_matches_public_api() -> None:
 
 
 def test_types_module_exports_curated_public_types() -> None:
-    """The public type module should expose Codex protocol models."""
+    """The public type module should expose Sofia protocol models."""
     assert public_types.__all__ == EXPECTED_TYPES_EXPORTS
     assert {name: hasattr(public_types, name) for name in EXPECTED_TYPES_EXPORTS} == dict.fromkeys(
         EXPECTED_TYPES_EXPORTS, True
@@ -316,7 +316,7 @@ def test_examples_use_public_import_surfaces() -> None:
 def test_generated_public_signatures_are_snake_case_and_typed() -> None:
     """Generated convenience methods should expose typed Pythonic keyword names."""
     expected = {
-        Codex.thread_start: [
+        Sofia.thread_start: [
             "approval_mode",
             "base_instructions",
             "config",
@@ -332,7 +332,7 @@ def test_generated_public_signatures_are_snake_case_and_typed() -> None:
             "session_start_source",
             "thread_source",
         ],
-        Codex.thread_list: [
+        Sofia.thread_list: [
             "archived",
             "cursor",
             "cwd",
@@ -345,7 +345,7 @@ def test_generated_public_signatures_are_snake_case_and_typed() -> None:
             "source_kinds",
             "use_state_db_only",
         ],
-        Codex.thread_resume: [
+        Sofia.thread_resume: [
             "approval_mode",
             "base_instructions",
             "config",
@@ -357,7 +357,7 @@ def test_generated_public_signatures_are_snake_case_and_typed() -> None:
             "sandbox",
             "service_tier",
         ],
-        Codex.thread_fork: [
+        Sofia.thread_fork: [
             "approval_mode",
             "base_instructions",
             "config",
@@ -482,7 +482,7 @@ def test_generated_public_signatures_are_snake_case_and_typed() -> None:
 def test_new_thread_methods_default_to_auto_review() -> None:
     """New threads should start with auto-review unless callers opt out."""
     funcs = [
-        Codex.thread_start,
+        Sofia.thread_start,
         AsyncCodex.thread_start,
     ]
 
@@ -494,8 +494,8 @@ def test_new_thread_methods_default_to_auto_review() -> None:
 def test_existing_thread_methods_default_to_preserving_approval_settings() -> None:
     """Existing thread operations should not serialize approval overrides by default."""
     funcs = [
-        Codex.thread_resume,
-        Codex.thread_fork,
+        Sofia.thread_resume,
+        Sofia.thread_fork,
         Thread.turn,
         Thread.run,
         AsyncCodex.thread_resume,
@@ -509,15 +509,15 @@ def test_existing_thread_methods_default_to_preserving_approval_settings() -> No
 
 def test_lifecycle_methods_are_codex_scoped() -> None:
     """Lifecycle operations should hang off the client rather than thread objects."""
-    assert hasattr(Codex, "thread_resume")
-    assert hasattr(Codex, "thread_fork")
-    assert hasattr(Codex, "thread_archive")
-    assert hasattr(Codex, "thread_unarchive")
+    assert hasattr(Sofia, "thread_resume")
+    assert hasattr(Sofia, "thread_fork")
+    assert hasattr(Sofia, "thread_archive")
+    assert hasattr(Sofia, "thread_unarchive")
     assert hasattr(AsyncCodex, "thread_resume")
     assert hasattr(AsyncCodex, "thread_fork")
     assert hasattr(AsyncCodex, "thread_archive")
     assert hasattr(AsyncCodex, "thread_unarchive")
-    assert not hasattr(Codex, "thread")
+    assert not hasattr(Sofia, "thread")
     assert not hasattr(AsyncCodex, "thread")
 
     assert not hasattr(Thread, "resume")
@@ -530,8 +530,8 @@ def test_lifecycle_methods_are_codex_scoped() -> None:
     assert not hasattr(AsyncThread, "unarchive")
 
     for fn in (
-        Codex.thread_archive,
-        Codex.thread_unarchive,
+        Sofia.thread_archive,
+        Sofia.thread_unarchive,
         AsyncCodex.thread_archive,
         AsyncCodex.thread_unarchive,
     ):
@@ -540,12 +540,12 @@ def test_lifecycle_methods_are_codex_scoped() -> None:
 
 def test_initialize_metadata_parses_user_agent_shape() -> None:
     """Initialize metadata should accept the legacy user-agent-only payload shape."""
-    payload = InitializeResponse.model_validate({"userAgent": "codex-cli/1.2.3"})
+    payload = InitializeResponse.model_validate({"userAgent": "sofia-cli/1.2.3"})
     parsed = validate_initialize_metadata(payload)
     assert parsed is payload
-    assert parsed.userAgent == "codex-cli/1.2.3"
+    assert parsed.userAgent == "sofia-cli/1.2.3"
     assert parsed.serverInfo is not None
-    assert parsed.serverInfo.name == "codex-cli"
+    assert parsed.serverInfo.name == "sofia-cli"
     assert parsed.serverInfo.version == "1.2.3"
 
 

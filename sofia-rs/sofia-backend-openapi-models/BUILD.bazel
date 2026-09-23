@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "sofia-backend-openapi-models",
+    crate_name = "sofia_backend_openapi_models",
+)

@@ -17,8 +17,8 @@ IMAGE_DATA_URL = generated_sample_image_data_url()
 
 
 async def main() -> None:
-    async with AsyncCodex(config=runtime_config()) as codex:
-        thread = await codex.thread_start(
+    async with AsyncCodex(config=runtime_config()) as sofia:
+        thread = await sofia.thread_start(
             model="gpt-5.4", config={"model_reasoning_effort": "high"}
         )
         turn = await thread.turn(

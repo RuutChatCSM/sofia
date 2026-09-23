@@ -1,0 +1,20 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-context-fragments"
+version.workspace = true
+
+[lib]
+name = "sofia_context_fragments"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-protocol = { workspace = true }
+sofia-utils-string = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

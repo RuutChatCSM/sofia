@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "http-client",
+    compile_data = glob(["tests/fixtures/**"]),
+    crate_name = "sofia_http_client",
+)

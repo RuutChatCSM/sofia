@@ -1,0 +1,19 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Upload logs?
+
+  The following files will be sent:
+    • sofia-logs.log
+    • sofia-doctor-report.json
+    • sofia-apps-tools-cache.json (if available)
+    • sofia-app-directory-cache.json (if available)
+    • auto-review-rollout-thread-1.jsonl
+    • sofia-connectivity-diagnostics.txt
+
+› 1. Yes  Share the current Sofia session logs and diagnostics with the team
+          for troubleshooting.
+  2. No
+
+  Press enter to confirm or esc to go back

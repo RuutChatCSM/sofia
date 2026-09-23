@@ -46,13 +46,13 @@ describe("MCP client conformance", () => {
         path.join(path.dirname(conformancePackage), "dist", "index.js"),
         "pinned official CLI",
       );
-      const codexBinary = requireFile(codexExecPath, "built Codex binary");
+      const codexBinary = requireFile(codexExecPath, "built Sofia binary");
       const baseline = requireFile(
         path.join(directory, "regression-baseline-v1.json"),
         "committed regression baseline",
       );
       const reportDirectory = process.env.RUNNER_TEMP ?? os.tmpdir();
-      const reportPath = path.join(reportDirectory, `codex-mcp-conformance-${process.pid}.json`);
+      const reportPath = path.join(reportDirectory, `sofia-mcp-conformance-${process.pid}.json`);
       const result = spawnSync(
         "python3",
         [
@@ -103,7 +103,7 @@ describe("MCP client conformance", () => {
     "does not introduce production reviewer or catalog-boundary regressions",
     () => {
       const directory = conformanceDirectory();
-      const codexBinary = requireFile(codexExecPath, "built Codex binary");
+      const codexBinary = requireFile(codexExecPath, "built Sofia binary");
       const reviewer = requireFile(
         path.join(directory, "review_regressions.py"),
         "production reviewer regression runner",
@@ -113,7 +113,7 @@ describe("MCP client conformance", () => {
         "committed production reviewer regression baseline",
       );
       const reportDirectory = process.env.RUNNER_TEMP ?? os.tmpdir();
-      const reportPath = path.join(reportDirectory, `codex-mcp-review-${process.pid}.json`);
+      const reportPath = path.join(reportDirectory, `sofia-mcp-review-${process.pid}.json`);
       const result = spawnSync(
         "python3",
         [

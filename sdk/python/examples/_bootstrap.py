@@ -103,7 +103,7 @@ def generated_sample_image_data_url() -> str:
 
 @contextlib.contextmanager
 def temporary_sample_image_path() -> Iterator[Path]:
-    with tempfile.TemporaryDirectory(prefix="codex-python-example-image-") as temp_root:
+    with tempfile.TemporaryDirectory(prefix="sofia-python-example-image-") as temp_root:
         image_path = Path(temp_root) / "generated_sample.png"
         image_path.write_bytes(_generated_sample_png_bytes())
         yield image_path

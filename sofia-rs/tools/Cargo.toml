@@ -1,0 +1,39 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-tools"
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bitflags = { workspace = true }
+sofia-code-mode = { workspace = true }
+sofia-connectors = { workspace = true }
+sofia-features = { workspace = true }
+sofia-file-system = { workspace = true }
+sofia-extension-items = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-output-truncation = { workspace = true }
+sofia-utils-string = { workspace = true }
+jsonptr = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = [
+    "base64",
+    "macros",
+    "schemars",
+    "server",
+] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+urlencoding = { workspace = true }
+
+[dev-dependencies]
+sofia-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }
+
+[lib]
+doctest = false

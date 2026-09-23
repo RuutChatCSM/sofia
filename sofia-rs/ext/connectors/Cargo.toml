@@ -1,0 +1,24 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-connectors-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_connectors_extension"
+path = "src/lib.rs"
+doctest = false
+test = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-connectors = { workspace = true }
+sofia-core-plugins = { workspace = true }
+sofia-file-system = { workspace = true }
+sofia-plugin = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

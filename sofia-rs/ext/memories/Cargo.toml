@@ -1,0 +1,33 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-memories-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_memories_extension"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-features = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-output-truncation = { workspace = true }
+sofia-utils-template = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["fs", "macros"] }

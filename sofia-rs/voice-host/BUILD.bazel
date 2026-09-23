@@ -1,0 +1,9 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "voice-host",
+    binaries_with_build_commit = ["sofia-voice-host"],
+    crate_name = "sofia_voice_host",
+    crate_srcs = [],
+    unit_test_args = ["--test-threads=1"],
+)

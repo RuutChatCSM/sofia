@@ -1,0 +1,15 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "core-plugins",
+    compile_data = glob(
+        include = ["**"],
+        allow_empty = True,
+        exclude = [
+            "**/* *",
+            "BUILD.bazel",
+            "Cargo.toml",
+        ],
+    ),
+    crate_name = "sofia_core_plugins",
+)

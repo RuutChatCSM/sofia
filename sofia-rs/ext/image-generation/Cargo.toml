@@ -1,0 +1,38 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-image-generation-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_image_generation_extension"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+sofia-api = { workspace = true }
+sofia-core = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-extension-items = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-image = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+http = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "app-server-protocol-noop-macros",
+    crate_name = "sofia_app_server_protocol_noop_macros",
+    proc_macro = True,
+)

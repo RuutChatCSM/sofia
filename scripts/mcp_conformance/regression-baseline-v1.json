@@ -4,28 +4,28 @@
   "checks": {
     "failing": [
       {
-        "check_id": "harness/auth/metadata-var3/codex-adapter",
+        "check_id": "harness/auth/metadata-var3/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/metadata-var3",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/pre-registration/codex-adapter",
+        "check_id": "harness/auth/pre-registration/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/pre-registration",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-from-www-authenticate/codex-adapter",
+        "check_id": "harness/auth/scope-from-www-authenticate/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/scope-from-www-authenticate",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-step-up/codex-adapter",
+        "check_id": "harness/auth/scope-step-up/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/scope-step-up",
         "source": "harness",
@@ -116,28 +116,28 @@
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-var3/codex-adapter",
+        "check_id": "harness/auth/metadata-var3/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/metadata-var3",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/pre-registration/codex-adapter",
+        "check_id": "harness/auth/pre-registration/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/pre-registration",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-from-www-authenticate/codex-adapter",
+        "check_id": "harness/auth/scope-from-www-authenticate/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/scope-from-www-authenticate",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-step-up/codex-adapter",
+        "check_id": "harness/auth/scope-step-up/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/scope-step-up",
         "source": "harness",
@@ -202,35 +202,35 @@
     ],
     "passing": [
       {
-        "check_id": "harness/auth/token-endpoint-auth-basic/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-basic/sofia-adapter",
         "mode": "2025-06-18",
         "scenario": "auth/token-endpoint-auth-basic",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-none/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-none/sofia-adapter",
         "mode": "2025-06-18",
         "scenario": "auth/token-endpoint-auth-none",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-post/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-post/sofia-adapter",
         "mode": "2025-06-18",
         "scenario": "auth/token-endpoint-auth-post",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/initialize/codex-adapter",
+        "check_id": "harness/initialize/sofia-adapter",
         "mode": "2025-06-18",
         "scenario": "initialize",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/tools_call/codex-adapter",
+        "check_id": "harness/tools_call/sofia-adapter",
         "mode": "2025-06-18",
         "scenario": "tools_call",
         "source": "harness",
@@ -636,98 +636,98 @@
         "transport": "stdio"
       },
       {
-        "check_id": "harness/auth/basic-cimd/codex-adapter",
+        "check_id": "harness/auth/basic-cimd/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/basic-cimd",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-default/codex-adapter",
+        "check_id": "harness/auth/metadata-default/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/metadata-default",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-var1/codex-adapter",
+        "check_id": "harness/auth/metadata-var1/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/metadata-var1",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-var2/codex-adapter",
+        "check_id": "harness/auth/metadata-var2/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/metadata-var2",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-from-scopes-supported/codex-adapter",
+        "check_id": "harness/auth/scope-from-scopes-supported/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/scope-from-scopes-supported",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-omitted-when-undefined/codex-adapter",
+        "check_id": "harness/auth/scope-omitted-when-undefined/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/scope-omitted-when-undefined",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-retry-limit/codex-adapter",
+        "check_id": "harness/auth/scope-retry-limit/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/scope-retry-limit",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-basic/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-basic/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/token-endpoint-auth-basic",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-none/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-none/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/token-endpoint-auth-none",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-post/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-post/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "auth/token-endpoint-auth-post",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/elicitation-sep1034-client-defaults/codex-adapter",
+        "check_id": "harness/elicitation-sep1034-client-defaults/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "elicitation-sep1034-client-defaults",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/initialize/codex-adapter",
+        "check_id": "harness/initialize/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "initialize",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/sse-retry/codex-adapter",
+        "check_id": "harness/sse-retry/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "sse-retry",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/tools_call/codex-adapter",
+        "check_id": "harness/tools_call/sofia-adapter",
         "mode": "2025-11-25",
         "scenario": "tools_call",
         "source": "harness",
@@ -1861,196 +1861,196 @@
         "transport": "stdio"
       },
       {
-        "check_id": "harness/auth/authorization-server-migration/codex-adapter",
+        "check_id": "harness/auth/authorization-server-migration/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/authorization-server-migration",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/basic-cimd/codex-adapter",
+        "check_id": "harness/auth/basic-cimd/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/basic-cimd",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-normalized/codex-adapter",
+        "check_id": "harness/auth/iss-normalized/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-normalized",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-not-advertised/codex-adapter",
+        "check_id": "harness/auth/iss-not-advertised/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-not-advertised",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-supported/codex-adapter",
+        "check_id": "harness/auth/iss-supported/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-supported",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-supported-missing/codex-adapter",
+        "check_id": "harness/auth/iss-supported-missing/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-supported-missing",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-unexpected/codex-adapter",
+        "check_id": "harness/auth/iss-unexpected/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-unexpected",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/iss-wrong-issuer/codex-adapter",
+        "check_id": "harness/auth/iss-wrong-issuer/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/iss-wrong-issuer",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-default/codex-adapter",
+        "check_id": "harness/auth/metadata-default/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/metadata-default",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-issuer-mismatch/codex-adapter",
+        "check_id": "harness/auth/metadata-issuer-mismatch/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/metadata-issuer-mismatch",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-var1/codex-adapter",
+        "check_id": "harness/auth/metadata-var1/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/metadata-var1",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/metadata-var2/codex-adapter",
+        "check_id": "harness/auth/metadata-var2/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/metadata-var2",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/offline-access-not-supported/codex-adapter",
+        "check_id": "harness/auth/offline-access-not-supported/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/offline-access-not-supported",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/offline-access-scope/codex-adapter",
+        "check_id": "harness/auth/offline-access-scope/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/offline-access-scope",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/resource-mismatch/codex-adapter",
+        "check_id": "harness/auth/resource-mismatch/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/resource-mismatch",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-from-scopes-supported/codex-adapter",
+        "check_id": "harness/auth/scope-from-scopes-supported/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/scope-from-scopes-supported",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-omitted-when-undefined/codex-adapter",
+        "check_id": "harness/auth/scope-omitted-when-undefined/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/scope-omitted-when-undefined",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/scope-retry-limit/codex-adapter",
+        "check_id": "harness/auth/scope-retry-limit/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/scope-retry-limit",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-basic/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-basic/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/token-endpoint-auth-basic",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-none/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-none/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/token-endpoint-auth-none",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/auth/token-endpoint-auth-post/codex-adapter",
+        "check_id": "harness/auth/token-endpoint-auth-post/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "auth/token-endpoint-auth-post",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/http-custom-headers/codex-adapter",
+        "check_id": "harness/http-custom-headers/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "http-custom-headers",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/http-invalid-tool-headers/codex-adapter",
+        "check_id": "harness/http-invalid-tool-headers/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "http-invalid-tool-headers",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/http-standard-headers/codex-adapter",
+        "check_id": "harness/http-standard-headers/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "http-standard-headers",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/json-schema-ref-no-deref/codex-adapter",
+        "check_id": "harness/json-schema-ref-no-deref/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "json-schema-ref-no-deref",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/request-metadata/codex-adapter",
+        "check_id": "harness/request-metadata/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "request-metadata",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/sep-2322-client-request-state/codex-adapter",
+        "check_id": "harness/sep-2322-client-request-state/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "sep-2322-client-request-state",
         "source": "harness",
         "transport": "official-http"
       },
       {
-        "check_id": "harness/tools_call/codex-adapter",
+        "check_id": "harness/tools_call/sofia-adapter",
         "mode": "2026-07-28",
         "scenario": "tools_call",
         "source": "harness",

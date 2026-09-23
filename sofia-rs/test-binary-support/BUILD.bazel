@@ -1,0 +1,7 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "test-binary-support",
+    crate_name = "sofia_test_binary_support",
+    crate_srcs = ["lib.rs"],
+)

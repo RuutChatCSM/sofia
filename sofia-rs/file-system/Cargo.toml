@@ -1,0 +1,20 @@
+[package]
+name = "sofia-file-system"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-path-uri = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[lib]
+test = false
+doctest = false

@@ -208,13 +208,13 @@ class AppServerHarness:
 
     def __init__(self, tmp_path: Path, *, requires_openai_auth: bool = False) -> None:
         self.tmp_path = tmp_path
-        self.codex_home = tmp_path / "codex-home"
+        self.sofia_home = tmp_path / "sofia-home"
         self.workspace = tmp_path / "workspace"
         self.requires_openai_auth = requires_openai_auth
         self.responses = MockResponsesServer()
 
     def __enter__(self) -> AppServerHarness:
-        self.codex_home.mkdir()
+        self.sofia_home.mkdir()
         self.workspace.mkdir()
         self.responses.__enter__()
         self._write_config()
@@ -222,7 +222,7 @@ class AppServerHarness:
 
     def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
         self.responses.__exit__(_exc_type, _exc, _tb)
-        shutil.rmtree(self.codex_home, ignore_errors=True)
+        shutil.rmtree(self.sofia_home, ignore_errors=True)
         shutil.rmtree(self.workspace, ignore_errors=True)
 
     def app_server_config(self) -> CodexConfig:
@@ -230,15 +230,15 @@ class AppServerHarness:
         return CodexConfig(
             cwd=str(self.workspace),
             env={
-                "CODEX_HOME": str(self.codex_home),
-                "CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG": "1",
+                "SOFIA_HOME": str(self.sofia_home),
+                "SOFIA_APP_SERVER_DISABLE_MANAGED_CONFIG": "1",
                 "RUST_LOG": "warn",
             },
         )
 
     def _write_config(self) -> None:
         """Write config.toml that routes model calls to the mock server."""
-        config_toml = self.codex_home / "config.toml"
+        config_toml = self.sofia_home / "config.toml"
         requires_openai_auth = "requires_openai_auth = true\n" if self.requires_openai_auth else ""
         config_toml.write_text(
             f"""

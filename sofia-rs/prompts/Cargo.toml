@@ -1,0 +1,25 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-prompts"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_prompts"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sofia-context-fragments = { workspace = true }
+sofia-git-utils = { workspace = true }
+sofia-execpolicy = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-template = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

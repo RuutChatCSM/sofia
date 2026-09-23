@@ -1,0 +1,33 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-core-api"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "sofia_core_api"
+path = "src/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-app-server-protocol = { workspace = true }
+sofia-arg0 = { workspace = true }
+sofia-analytics = { workspace = true }
+sofia-config = { workspace = true }
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-home = { workspace = true }
+sofia-history = { workspace = true }
+sofia-image-generation-extension = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-features = { workspace = true }
+sofia-login = { workspace = true }
+sofia-model-provider-info = { workspace = true }
+sofia-models-manager = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-state = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }

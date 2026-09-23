@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "cloud-tasks-mock-client",
+    crate_name = "sofia_cloud_tasks_mock_client",
+)

@@ -1,6 +1,6 @@
 packages:
-  - codex-cli
-  - codex-rs/responses-api-proxy/npm
+  - sofia-cli
+  - sofia-rs/responses-api-proxy/npm
   - sdk/typescript
 
 ignoredBuiltDependencies:

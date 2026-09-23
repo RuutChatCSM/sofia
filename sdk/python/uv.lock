@@ -7,7 +7,7 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-openai-codex-cli-bin = "2026-08-19T00:00:00Z"
+openai-sofia-cli-bin = "2026-08-19T00:00:00Z"
 
 [[package]]
 name = "annotated-types"
@@ -281,11 +281,11 @@ wheels = [
 ]
 
 [[package]]
-name = "openai-codex"
+name = "openai-sofia"
 version = "0.0.0.dev0"
 source = { editable = "." }
 dependencies = [
-    { name = "openai-codex-cli-bin" },
+    { name = "openai-sofia-cli-bin" },
     { name = "pydantic" },
 ]
 
@@ -306,7 +306,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "openai-codex-cli-bin", specifier = "==0.147.0" },
+    { name = "openai-sofia-cli-bin", specifier = "==0.147.0" },
     { name = "pydantic", specifier = ">=2.12" },
 ]
 
@@ -324,7 +324,7 @@ test = [
 ]
 
 [[package]]
-name = "openai-codex-cli-bin"
+name = "openai-sofia-cli-bin"
 version = "0.147.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [

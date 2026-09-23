@@ -1,0 +1,35 @@
+[package]
+name = "sofia-arg0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sofia_arg0"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sofia-apply-patch = { workspace = true }
+sofia-async-utils = { workspace = true }
+sofia-exec-server = { workspace = true }
+sofia-install-context = { workspace = true }
+sofia-linux-sandbox = { workspace = true }
+sofia-sandboxing = { workspace = true }
+sofia-shell-escalation = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
+dotenvy = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+
+[target.'cfg(windows)'.dependencies]
+sofia-windows-sandbox = { workspace = true }
+pathdiff = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

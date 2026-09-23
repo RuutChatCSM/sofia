@@ -75,7 +75,7 @@ jobs:
 
           try:
               with urllib.request.urlopen(
-                  f"https://pypi.org/pypi/openai-codex-cli-bin/{version}/json",
+                  f"https://pypi.org/pypi/openai-sofia-cli-bin/{version}/json",
                   timeout=30,
               ) as response:
                   payload = json.load(response)

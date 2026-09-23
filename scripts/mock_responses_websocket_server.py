@@ -122,7 +122,7 @@ async def _handle_connection(
         sys.stdout.write(f"[conn] {_utc_iso()} send {_dump_json(ev)}\n")
         await websocket.send(_dump_json(ev))
 
-    # Request 1: provoke a function call (mirrors `codex-rs/core/tests/suite/agent_websocket.rs`).
+    # Request 1: provoke a function call (mirrors `sofia-rs/core/tests/suite/agent_websocket.rs`).
     await recv_json("req1")
     await send_event(_event_response_created("resp-1"))
     await send_event(_event_function_call(CALL_ID, FUNCTION_NAME, FUNCTION_ARGS_JSON))
@@ -170,7 +170,7 @@ model_provider = "localapi_ws"
 model_reasoning_effort = "medium"
 
 
-start codex with `codex --profile localapi_ws`
+start sofia with `sofia --profile localapi_ws`
 """)
     sys.stdout.flush()
 

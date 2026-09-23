@@ -1,0 +1,37 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "sofia-goal-extension"
+version.workspace = true
+
+[lib]
+name = "sofia_goal_extension"
+path = "src/lib.rs"
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sofia-analytics = { workspace = true }
+sofia-core = { workspace = true }
+sofia-extension-api = { workspace = true }
+sofia-otel = { workspace = true }
+sofia-protocol = { workspace = true }
+sofia-rollout = { workspace = true }
+sofia-state = { workspace = true }
+sofia-tools = { workspace = true }
+sofia-utils-template = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+sofia-utils-absolute-path = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

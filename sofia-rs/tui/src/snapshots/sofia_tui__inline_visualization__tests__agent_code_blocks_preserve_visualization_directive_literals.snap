@@ -1,0 +1,11 @@
+---
+source: tui/src/inline_visualization_tests.rs
+expression: text
+---
+• Fenced:
+
+  ::sofia-inline-vis{file="chart.html"}
+
+  Indented:
+
+      ::sofia-inline-vis{file="chart.html"}

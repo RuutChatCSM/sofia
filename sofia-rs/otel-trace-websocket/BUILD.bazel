@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "otel-trace-websocket",
+    crate_name = "sofia_otel_trace_websocket",
+)

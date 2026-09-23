@@ -24,15 +24,15 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                 f"rust-v{VERSION}"
             ],
         )
         self.assertIn(
-            f"Could not fetch GitHub release metadata for Codex {VERSION}",
+            f"Could not fetch GitHub release metadata for Sofia {VERSION}",
             result.stderr,
         )
-        self.assertNotIn("Could not find Codex package", result.stderr)
+        self.assertNotIn("Could not find Sofia package", result.stderr)
 
     def test_exact_release_opt_out_uses_github_metadata_once(self) -> None:
         result, requests = run_installer(VERSION, use_mirror=False)
@@ -41,10 +41,10 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                 f"rust-v{VERSION}",
-                "https://github.com/openai/codex/releases/download/"
-                f"rust-v{VERSION}/codex-package_SHA256SUMS",
+                "https://github.com/RuutChatCSM/sofia/releases/download/"
+                f"rust-v{VERSION}/sofia-package_SHA256SUMS",
             ],
         )
         self.assertIn(f"Resolved version: {VERSION}", result.stdout)
@@ -57,10 +57,10 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                 f"rust-v{version}",
-                "https://github.com/openai/codex/releases/download/"
-                f"rust-v{version}/codex-package_SHA256SUMS",
+                "https://github.com/RuutChatCSM/sofia/releases/download/"
+                f"rust-v{version}/sofia-package_SHA256SUMS",
             ],
         )
         self.assertIn(f"Resolved version: {version}", result.stdout)
@@ -72,9 +72,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/latest",
-                "https://github.com/openai/codex/releases/download/"
-                f"rust-v{VERSION}/codex-package_SHA256SUMS",
+                "https://api.github.com/repos/RuutChatCSM/sofia/releases/latest",
+                "https://github.com/RuutChatCSM/sofia/releases/download/"
+                f"rust-v{VERSION}/sofia-package_SHA256SUMS",
             ],
         )
         self.assertIn(f"Resolved version: {VERSION}", result.stdout)
@@ -88,9 +88,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/latest",
-                "https://github.com/openai/codex/releases/download/"
-                f"rust-v{VERSION}/codex-package_SHA256SUMS",
+                "https://api.github.com/repos/RuutChatCSM/sofia/releases/latest",
+                "https://github.com/RuutChatCSM/sofia/releases/download/"
+                f"rust-v{VERSION}/sofia-package_SHA256SUMS",
             ],
         )
         self.assertIn(f"Resolved version: {VERSION}", result.stdout)
@@ -102,8 +102,8 @@ class InstallShTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len(requests), 2)
-        self.assertIn("/codex-npm-", requests[1])
-        self.assertNotIn("codex-package_SHA256SUMS", requests[1])
+        self.assertIn("/sofia-npm-", requests[1])
+        self.assertNotIn("sofia-package_SHA256SUMS", requests[1])
 
     def test_macos_install_exposes_code_mode_host_beside_codex(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -121,13 +121,13 @@ class InstallShTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             install_bin = root / "install-bin"
-            current = root / "codex-home" / "packages" / "standalone" / "current"
-            codex_path = install_bin / "codex"
-            host_path = install_bin / "codex-code-mode-host"
-            self.assertEqual(os.readlink(codex_path), str(current / "bin" / "codex"))
+            current = root / "sofia-home" / "packages" / "standalone" / "current"
+            sofia_path = install_bin / "sofia"
+            host_path = install_bin / "sofia-code-mode-host"
+            self.assertEqual(os.readlink(sofia_path), str(current / "bin" / "sofia"))
             self.assertEqual(
                 os.readlink(host_path),
-                str(current / "bin" / "codex-code-mode-host"),
+                str(current / "bin" / "sofia-code-mode-host"),
             )
             self.assertTrue(os.access(host_path, os.X_OK))
 
@@ -143,16 +143,16 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
 
@@ -166,7 +166,7 @@ class InstallShTest(unittest.TestCase):
                 checksum_path=checksum,
                 force_macos=True,
             )
-            marker = root / "codex-home/packages/standalone/auto-update-version"
+            marker = root / "sofia-home/packages/standalone/auto-update-version"
             latest, _ = run_installer_in(root, "latest", **options)
             self.assertEqual(latest.returncode, 0, latest.stderr)
             release_name = f"{VERSION}-aarch64-apple-darwin"
@@ -177,7 +177,7 @@ class InstallShTest(unittest.TestCase):
             self.assertFalse(marker.exists())
 
             updater_record = (
-                root / "codex-home/app-server-daemon/app-server-updater.pid"
+                root / "sofia-home/app-server-daemon/app-server-updater.pid"
             )
             updater_record.parent.mkdir(parents=True)
             updater_record.write_text(
@@ -208,7 +208,7 @@ class InstallShTest(unittest.TestCase):
 
             managed = (
                 root
-                / f"codex-home/packages/standalone/releases/{release_name}/bin/codex"
+                / f"sofia-home/packages/standalone/releases/{release_name}/bin/sofia"
             )
             managed.unlink()
             guarded, _ = run_installer_in(
@@ -233,7 +233,7 @@ class InstallShTest(unittest.TestCase):
             pinned, _ = run_installer_in(root, VERSION, **options)
             self.assertEqual(pinned.returncode, 0, pinned.stderr)
             updater_record = (
-                root / "codex-home/app-server-daemon/app-server-updater.pid"
+                root / "sofia-home/app-server-daemon/app-server-updater.pid"
             )
             updater_record.parent.mkdir(parents=True)
             updater_record.write_text(
@@ -251,7 +251,7 @@ class InstallShTest(unittest.TestCase):
             )
             self.assertEqual(attempted.returncode, 0, attempted.stderr)
             self.assertFalse(
-                (root / "codex-home/packages/standalone/auto-update-version").exists()
+                (root / "sofia-home/packages/standalone/auto-update-version").exists()
             )
 
     def test_releases_unusable_metadata_falls_back_to_github(self) -> None:
@@ -268,11 +268,11 @@ class InstallShTest(unittest.TestCase):
                     "tag_name": f"rust-v{VERSION}",
                     "assets": [
                         {
-                            "name": "codex-package-aarch64-apple-darwin.tar.gz",
+                            "name": "sofia-package-aarch64-apple-darwin.tar.gz",
                             "digest": "sha256:" + "a" * 64,
                         },
                         {
-                            "name": "codex-package_SHA256SUMS",
+                            "name": "sofia-package_SHA256SUMS",
                             "digest": "sha256:" + "z" * 64,
                         },
                     ],
@@ -297,19 +297,19 @@ class InstallShTest(unittest.TestCase):
                         archive_path=archive_path,
                         checksum_path=checksum_path,
                         force_macos=True,
-                        use_mirror=None,
+                        use_mirror=True,
                     )
 
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(
                         requests,
                         [
-                            "https://releases.openai.com/codex/channels/latest",
-                            "https://api.github.com/repos/openai/codex/releases/latest",
-                            "https://github.com/openai/codex/releases/download/"
-                            f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                            "https://github.com/openai/codex/releases/download/"
-                            f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                            "https://releases.openai.com/sofia/channels/latest",
+                            "https://api.github.com/repos/RuutChatCSM/sofia/releases/latest",
+                            "https://github.com/RuutChatCSM/sofia/releases/download/"
+                            f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                            "https://github.com/RuutChatCSM/sofia/releases/download/"
+                            f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                         ],
                     )
                     self.assertIn("falling back to GitHub Releases", result.stderr)
@@ -331,20 +331,20 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 requests,
                 [
-                    f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("falling back to GitHub Releases", result.stderr)
@@ -361,7 +361,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="asset_fallback",
             )
 
@@ -369,13 +369,13 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("retrying from GitHub Releases", result.stderr)
@@ -392,7 +392,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="corrupt_assets",
             )
 
@@ -400,13 +400,13 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("checksum did not match expected digest", result.stderr)
@@ -418,7 +418,7 @@ class InstallShTest(unittest.TestCase):
             archive_path, checksum_path, metadata_json = create_package_release(root)
             mirror_metadata = json.loads(metadata_json)
             for release_asset in mirror_metadata["assets"]:
-                if release_asset["name"] == "codex-package_SHA256SUMS":
+                if release_asset["name"] == "sofia-package_SHA256SUMS":
                     release_asset["digest"] = "sha256:" + "0" * 64
 
             result, requests = run_installer_in(
@@ -429,20 +429,20 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("checksum did not match expected digest", result.stderr)
@@ -453,12 +453,12 @@ class InstallShTest(unittest.TestCase):
             archive_path, checksum_path, metadata_json = create_package_release(root)
             mirror_checksum_path = root / "mirror-SHA256SUMS"
             mirror_checksum_path.write_text(
-                f"{'a' * 64}  codex-package-other-platform.tar.gz\n",
+                f"{'a' * 64}  sofia-package-other-platform.tar.gz\n",
                 encoding="utf-8",
             )
             mirror_metadata = json.loads(metadata_json)
             for release_asset in mirror_metadata["assets"]:
-                if release_asset["name"] == "codex-package_SHA256SUMS":
+                if release_asset["name"] == "sofia-package_SHA256SUMS":
                     release_asset["digest"] = (
                         "sha256:"
                         + hashlib.sha256(mirror_checksum_path.read_bytes()).hexdigest()
@@ -473,20 +473,20 @@ class InstallShTest(unittest.TestCase):
                 checksum_path=checksum_path,
                 releases_checksum_path=mirror_checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn("retrying from GitHub Releases", result.stderr)
@@ -503,7 +503,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="corrupt_checksum_and_github",
             )
 
@@ -511,11 +511,11 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    "https://releases.openai.com/codex/channels/latest",
-                    f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://releases.openai.com/sofia/channels/latest",
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/sofia-package_SHA256SUMS",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-package_SHA256SUMS",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
@@ -543,9 +543,9 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 requests,
                 [
-                    f"https://releases.openai.com/codex/releases/{MISMATCH_VERSION}/release.json",
-                    f"https://releases.openai.com/codex/releases/{MISMATCH_VERSION}/codex-package_SHA256SUMS",
-                    f"https://releases.openai.com/codex/releases/{MISMATCH_VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
+                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/release.json",
+                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/sofia-package_SHA256SUMS",
+                    f"https://releases.openai.com/sofia/releases/{MISMATCH_VERSION}/sofia-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
             self.assertIn(
@@ -573,11 +573,11 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 first_requests,
                 [
-                    f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/openai/codex/releases/download/"
-                    f"rust-v{VERSION}/codex-npm-darwin-arm64-{VERSION}.tgz",
+                    "https://github.com/RuutChatCSM/sofia/releases/download/"
+                    f"rust-v{VERSION}/sofia-npm-darwin-arm64-{VERSION}.tgz",
                 ],
             )
 
@@ -595,12 +595,12 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(
                 second_requests,
                 [
-                    f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    f"https://releases.openai.com/sofia/releases/{VERSION}/release.json",
+                    "https://api.github.com/repos/RuutChatCSM/sofia/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
-            self.assertNotIn("Downloading Codex CLI", second_result.stdout)
+            self.assertNotIn("Downloading Sofia CLI", second_result.stdout)
 
 
 def run_installer(
@@ -658,72 +658,72 @@ def run_installer_in(
               fi
               previous="$arg"
             done
-            printf '%s\n' "$url" >>"$CODEX_TEST_REQUEST_LOG"
+            printf '%s\n' "$url" >>"$SOFIA_TEST_REQUEST_LOG"
 
             case "$url" in
               https://api.github.com/*)
-                if [ "$CODEX_TEST_METADATA_FAILURE" = "1" ]; then
+                if [ "$SOFIA_TEST_METADATA_FAILURE" = "1" ]; then
                   echo "curl: (22) The requested URL returned error: 403" >&2
                   exit 22
                 fi
-                printf '%s\n' "$CODEX_TEST_METADATA_JSON"
+                printf '%s\n' "$SOFIA_TEST_METADATA_JSON"
                 ;;
-              https://releases.openai.com/codex/channels/latest|https://releases.openai.com/codex/releases/*/release.json)
-                if [ "$CODEX_TEST_RELEASES_MODE" = "channel_failure" ]; then
+              https://releases.openai.com/sofia/channels/latest|https://releases.openai.com/sofia/releases/*/release.json)
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "channel_failure" ]; then
                   exit 22
                 fi
-                printf '%s\n' "$CODEX_TEST_RELEASES_METADATA_JSON"
+                printf '%s\n' "$SOFIA_TEST_RELEASES_METADATA_JSON"
                 ;;
-              https://releases.openai.com/codex/releases/*/codex-package_SHA256SUMS)
-                if [ "$CODEX_TEST_RELEASES_MODE" = "asset_fallback" ]; then
+              https://releases.openai.com/sofia/releases/*/sofia-package_SHA256SUMS)
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "asset_fallback" ]; then
                   exit 22
                 fi
-                if [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_assets" ] ||
-                  [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "corrupt_assets" ] ||
+                  [ "$SOFIA_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
                   printf '<html>proxy error</html>\n' >"$output"
                   exit 0
                 fi
-                if [ -n "$CODEX_TEST_RELEASES_CHECKSUM_PATH" ]; then
-                  cp "$CODEX_TEST_RELEASES_CHECKSUM_PATH" "$output"
+                if [ -n "$SOFIA_TEST_RELEASES_CHECKSUM_PATH" ]; then
+                  cp "$SOFIA_TEST_RELEASES_CHECKSUM_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://releases.openai.com/codex/releases/*/codex-package-*.tar.gz)
-                if [ "$CODEX_TEST_RELEASES_MODE" = "asset_fallback" ]; then
+              https://releases.openai.com/sofia/releases/*/sofia-package-*.tar.gz)
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "asset_fallback" ]; then
                   exit 22
                 fi
-                if [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_assets" ]; then
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "corrupt_assets" ]; then
                   printf '<html>proxy error</html>\n' >"$output"
                   exit 0
                 fi
-                if [ -n "$CODEX_TEST_ARCHIVE_PATH" ]; then
-                  cp "$CODEX_TEST_ARCHIVE_PATH" "$output"
+                if [ -n "$SOFIA_TEST_ARCHIVE_PATH" ]; then
+                  cp "$SOFIA_TEST_ARCHIVE_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-package_SHA256SUMS)
-                if [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
+              https://github.com/RuutChatCSM/sofia/releases/download/*/sofia-package_SHA256SUMS)
+                if [ "$SOFIA_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
                   printf '<html>proxy error</html>\n' >"$output"
                   exit 0
                 fi
-                if [ -n "$CODEX_TEST_CHECKSUM_PATH" ]; then
-                  cp "$CODEX_TEST_CHECKSUM_PATH" "$output"
+                if [ -n "$SOFIA_TEST_CHECKSUM_PATH" ]; then
+                  cp "$SOFIA_TEST_CHECKSUM_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-package-*.tar.gz)
-                if [ -n "$CODEX_TEST_ARCHIVE_PATH" ]; then
-                  cp "$CODEX_TEST_ARCHIVE_PATH" "$output"
+              https://github.com/RuutChatCSM/sofia/releases/download/*/sofia-package-*.tar.gz)
+                if [ -n "$SOFIA_TEST_ARCHIVE_PATH" ]; then
+                  cp "$SOFIA_TEST_ARCHIVE_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-npm-*.tgz)
-                if [ -n "$CODEX_TEST_LEGACY_ARCHIVE_PATH" ]; then
-                  cp "$CODEX_TEST_LEGACY_ARCHIVE_PATH" "$output"
+              https://github.com/RuutChatCSM/sofia/releases/download/*/sofia-npm-*.tgz)
+                if [ -n "$SOFIA_TEST_LEGACY_ARCHIVE_PATH" ]; then
+                  cp "$SOFIA_TEST_LEGACY_ARCHIVE_PATH" "$output"
                 else
                   exit 22
                 fi
@@ -755,8 +755,8 @@ def run_installer_in(
             if fail_ps
             else "#!/bin/sh\n"
             'case "$*" in\n'
-            '  *lstart*) printf "S %s\\n" "$CODEX_TEST_PARENT_START" ;;\n'
-            '  *) printf "%s\\n" "$CODEX_TEST_PARENT_PID" ;;\n'
+            '  *lstart*) printf "S %s\\n" "$SOFIA_TEST_PARENT_START" ;;\n'
+            '  *) printf "%s\\n" "$SOFIA_TEST_PARENT_PID" ;;\n'
             "esac\n",
             encoding="utf-8",
         )
@@ -767,47 +767,47 @@ def run_installer_in(
     env = os.environ.copy()
     env.update(
         {
-            "CODEX_HOME": str(root / "codex-home"),
-            "CODEX_INSTALL_DIR": str(root / "install-bin"),
+            "SOFIA_HOME": str(root / "sofia-home"),
+            "SOFIA_INSTALL_DIR": str(root / "install-bin"),
             "CODEX_NON_INTERACTIVE": "1",
-            "CODEX_RELEASE": release,
-            "CODEX_TEST_ARCHIVE_PATH": str(archive_path or ""),
-            "CODEX_TEST_CHECKSUM_PATH": str(checksum_path or ""),
-            "CODEX_TEST_RELEASES_CHECKSUM_PATH": str(
+            "SOFIA_RELEASE": release,
+            "SOFIA_TEST_ARCHIVE_PATH": str(archive_path or ""),
+            "SOFIA_TEST_CHECKSUM_PATH": str(checksum_path or ""),
+            "SOFIA_TEST_RELEASES_CHECKSUM_PATH": str(
                 releases_checksum_path or checksum_path or ""
             ),
-            "CODEX_TEST_LEGACY_ARCHIVE_PATH": str(legacy_archive_path or ""),
-            "CODEX_TEST_METADATA_FAILURE": "1" if metadata_failure else "0",
-            "CODEX_TEST_METADATA_JSON": (
+            "SOFIA_TEST_LEGACY_ARCHIVE_PATH": str(legacy_archive_path or ""),
+            "SOFIA_TEST_METADATA_FAILURE": "1" if metadata_failure else "0",
+            "SOFIA_TEST_METADATA_JSON": (
                 metadata_json if metadata_json is not None else release_metadata()
             ),
-            "CODEX_TEST_RELEASES_METADATA_JSON": (
+            "SOFIA_TEST_RELEASES_METADATA_JSON": (
                 releases_metadata_json
                 if releases_metadata_json is not None
                 else metadata_json
                 if metadata_json is not None
                 else release_metadata()
             ),
-            "CODEX_TEST_RELEASES_MODE": releases_mode,
-            "CODEX_TEST_REQUEST_LOG": str(request_log),
+            "SOFIA_TEST_RELEASES_MODE": releases_mode,
+            "SOFIA_TEST_REQUEST_LOG": str(request_log),
             "HOME": str(home),
             "PATH": f"{bin_dir}:/usr/bin:/bin",
             "SHELL": "/bin/sh",
         }
     )
     if update_guard_from_release is None:
-        env.pop("CODEX_INSTALL_IF_LATEST", None)
-        env.pop("CODEX_UPDATE_FROM_RELEASE", None)
+        env.pop("SOFIA_INSTALL_IF_LATEST", None)
+        env.pop("SOFIA_UPDATE_FROM_RELEASE", None)
     else:
-        env["CODEX_INSTALL_IF_LATEST"] = "1"
-        env["CODEX_UPDATE_FROM_RELEASE"] = update_guard_from_release
+        env["SOFIA_INSTALL_IF_LATEST"] = "1"
+        env["SOFIA_UPDATE_FROM_RELEASE"] = update_guard_from_release
     if old_updater_parent_pid is not None:
-        env["CODEX_TEST_PARENT_PID"] = str(old_updater_parent_pid)
-        env["CODEX_TEST_PARENT_START"] = process_start_time()
+        env["SOFIA_TEST_PARENT_PID"] = str(old_updater_parent_pid)
+        env["SOFIA_TEST_PARENT_START"] = process_start_time()
     if use_mirror is None:
-        env.pop("CODEX_INSTALLER_USE_RELEASES_OPENAI_COM", None)
+        env.pop("SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM", None)
     else:
-        env["CODEX_INSTALLER_USE_RELEASES_OPENAI_COM"] = (
+        env["SOFIA_INSTALLER_USE_RELEASES_OPENAI_COM"] = (
             "TRUE" if use_mirror else "false"
         )
     result = subprocess.run(
@@ -839,26 +839,26 @@ def create_package_release(
 ) -> tuple[Path, Path, str]:
     package_dir = root / "package"
     (package_dir / "bin").mkdir(parents=True)
-    (package_dir / "codex-path").mkdir()
-    (package_dir / "codex-package.json").write_text("{}\n", encoding="utf-8")
+    (package_dir / "sofia-path").mkdir()
+    (package_dir / "sofia-package.json").write_text("{}\n", encoding="utf-8")
     write_executable(
-        package_dir / "bin" / "codex",
-        f"#!/bin/sh\nprintf 'codex-cli {VERSION}\\n'\n",
+        package_dir / "bin" / "sofia",
+        f"#!/bin/sh\nprintf 'sofia-cli {VERSION}\\n'\n",
     )
     write_executable(
-        package_dir / "bin" / "codex-code-mode-host",
+        package_dir / "bin" / "sofia-code-mode-host",
         "#!/bin/sh\nexit 0\n",
     )
-    write_executable(package_dir / "codex-path" / "rg", "#!/bin/sh\nexit 0\n")
+    write_executable(package_dir / "sofia-path" / "rg", "#!/bin/sh\nexit 0\n")
 
-    asset = "codex-package-aarch64-apple-darwin.tar.gz"
+    asset = "sofia-package-aarch64-apple-darwin.tar.gz"
     archive_path = root / asset
     with tarfile.open(archive_path, "w:gz") as archive:
         for path in package_dir.iterdir():
             archive.add(path, arcname=path.name)
 
     archive_digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    checksum_path = root / "codex-package_SHA256SUMS"
+    checksum_path = root / "sofia-package_SHA256SUMS"
     checksum_path.write_text(f"{archive_digest}  {asset}\n", encoding="utf-8")
     checksum_digest = hashlib.sha256(checksum_path.read_bytes()).hexdigest()
     metadata_json = json.dumps(
@@ -866,7 +866,7 @@ def create_package_release(
             "assets": [
                 {"name": asset, "digest": f"sha256:{archive_digest}"},
                 {
-                    "name": "codex-package_SHA256SUMS",
+                    "name": "sofia-package_SHA256SUMS",
                     "digest": f"sha256:{checksum_digest}",
                 },
             ],
@@ -880,15 +880,15 @@ def create_package_release(
 def create_legacy_release(root: Path) -> tuple[Path, str]:
     package_dir = root / "legacy-package"
     vendor_dir = package_dir / "package" / "vendor" / "aarch64-apple-darwin"
-    (vendor_dir / "codex").mkdir(parents=True)
+    (vendor_dir / "sofia").mkdir(parents=True)
     (vendor_dir / "path").mkdir()
     write_executable(
-        vendor_dir / "codex" / "codex",
-        f"#!/bin/sh\nprintf 'codex-cli {VERSION}\\n'\n",
+        vendor_dir / "sofia" / "sofia",
+        f"#!/bin/sh\nprintf 'sofia-cli {VERSION}\\n'\n",
     )
     write_executable(vendor_dir / "path" / "rg", "#!/bin/sh\nexit 0\n")
 
-    asset = f"codex-npm-darwin-arm64-{VERSION}.tgz"
+    asset = f"sofia-npm-darwin-arm64-{VERSION}.tgz"
     archive_path = root / asset
     with tarfile.open(archive_path, "w:gz") as archive:
         archive.add(package_dir / "package", arcname="package")
@@ -912,7 +912,7 @@ def write_executable(path: Path, contents: str) -> None:
 def release_metadata(*, compact: bool = False, reorder: bool = False) -> str:
     assets = [
         asset_metadata(
-            f"codex-package-{target}.tar.gz",
+            f"sofia-package-{target}.tar.gz",
             f"sha256:{'a' * 64}",
             reorder=reorder,
         )
@@ -925,7 +925,7 @@ def release_metadata(*, compact: bool = False, reorder: bool = False) -> str:
     ]
     assets.append(
         asset_metadata(
-            "codex-package_SHA256SUMS",
+            "sofia-package_SHA256SUMS",
             f"sha256:{'b' * 64}",
             reorder=reorder,
         )
@@ -949,18 +949,18 @@ def legacy_release_metadata_with_decoys() -> str:
     assets = [
         {
             "metadata": {
-                "name": "codex-package-x86_64-unknown-linux-musl.tar.gz",
+                "name": "sofia-package-x86_64-unknown-linux-musl.tar.gz",
                 "digest": fake_digest,
             },
             "digest": f"sha256:{'c' * 64}",
-            "name": f"codex-npm-{target}-{VERSION}.tgz",
+            "name": f"sofia-npm-{target}-{VERSION}.tgz",
         }
         for target in ("darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64")
     ]
     return json.dumps(
         {
             "body": (
-                f'fake: {{"name":"codex-package_SHA256SUMS","digest":"{fake_digest}"}}'
+                f'fake: {{"name":"sofia-package_SHA256SUMS","digest":"{fake_digest}"}}'
             ),
             "assets": assets,
             "tag_name": f"rust-v{VERSION}",

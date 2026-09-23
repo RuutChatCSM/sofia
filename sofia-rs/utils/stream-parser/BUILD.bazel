@@ -1,0 +1,6 @@
+load("//:defs.bzl", "sofia_rust_crate")
+
+sofia_rust_crate(
+    name = "stream-parser",
+    crate_name = "sofia_utils_stream_parser",
+)
