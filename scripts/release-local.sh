@@ -447,6 +447,17 @@ package_target() { # target
   for asset in sofia sofia-code-mode-host sofia-responses-api-proxy sofia-app-server; do
     cp -f "$out/$asset" "$archive_dir/${asset}-${target}"
   done
+
+  # Match CI: publish compressed standalone binaries, not raw Mach-O files.
+  for path in "$archive_dir"/*; do
+    local base
+    base="$(basename "$path")"
+    case "$base" in
+      *.tar.gz|*.tar.zst|*.zip|*.dmg|*.zst) continue ;;
+    esac
+    run tar -C "$archive_dir" -czf "$archive_dir/${base}.tar.gz" "$base"
+    run zstd -T0 -19 --rm "$archive_dir/$base"
+  done
 }
 
 finalize_assets() {
