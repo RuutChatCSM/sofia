@@ -1,11 +1,11 @@
-<p align="center"><strong>Sofia CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
+<p align="center"><strong>Sofia CLI</strong> is a coding agent that runs locally on your computer.
 <p align="center">
   <img src="https://github.com/RuutChatCSM/sofia/blob/main/.github/sofia-cli-splash.png" alt="Sofia CLI splash" width="80%" />
 </p>
 </br>
-If you want Sofia in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/sofia/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>sofia app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Sofia App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Sofia Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+Install or update the CLI:
+</br><code>curl -fsSL https://release.ruut.chat/sofia/install.sh | sh</code>
+</br>Releases and source: <a href="https://github.com/RuutChatCSM/sofia">github.com/RuutChatCSM/sofia</a>.</p>
 
 ---
 

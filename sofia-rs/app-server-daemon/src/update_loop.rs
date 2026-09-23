@@ -43,9 +43,9 @@ pub(crate) use manual_update::request as request_manual_update;
 const INITIAL_UPDATE_DELAY: Duration = Duration::from_secs(5 * 60);
 const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
-const INSTALL_URL: &str = "https://chatgpt.com/codex/install.sh";
+const INSTALL_URL: &str = "https://release.ruut.chat/sofia/install.sh";
 #[cfg(windows)]
-const INSTALL_URL: &str = "https://chatgpt.com/codex/install.ps1";
+const INSTALL_URL: &str = "https://release.ruut.chat/sofia/install.ps1";
 
 pub(crate) async fn run(http_client_factory: HttpClientFactory) -> Result<()> {
     let http = RouteAwareClientPool::new_without_request_logging(

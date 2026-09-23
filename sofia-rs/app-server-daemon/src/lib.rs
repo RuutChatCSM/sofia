@@ -842,9 +842,9 @@ impl Daemon {
 
         let managed_codex_path = self.managed_codex_bin.display();
         let install_command = if cfg!(windows) {
-            "irm https://chatgpt.com/codex/install.ps1 | iex"
+            "irm https://release.ruut.chat/sofia/install.ps1 | iex"
         } else {
-            "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+            "curl -fsSL https://release.ruut.chat/sofia/install.sh | sh"
         };
         Err(anyhow!(
             "managed standalone Sofia install not found at {managed_codex_path}\n\n\

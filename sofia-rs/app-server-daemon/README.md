@@ -78,14 +78,14 @@ running.
 For a new Linux or macOS machine:
 
 ```sh
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
+curl -fsSL https://release.ruut.chat/sofia/install.sh | sh
 $HOME/.sofia/packages/standalone/current/sofia app-server daemon bootstrap --remote-control
 ```
 
 On Windows, use a non-elevated PowerShell terminal whose host allows breakaway:
 
 ```powershell
-irm https://chatgpt.com/codex/install.ps1 | iex
+irm https://release.ruut.chat/sofia/install.ps1 | iex
 $codexHome = if ($env:SOFIA_HOME) { $env:SOFIA_HOME } else { Join-Path $HOME '.sofia' }
 & "$codexHome\packages\standalone\current\bin\sofia.exe" app-server daemon bootstrap --remote-control
 ```
