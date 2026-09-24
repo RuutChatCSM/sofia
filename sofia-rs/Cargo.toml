@@ -155,7 +155,7 @@ resolver = "2"
 # app-server binaries reporting below 0.141.0, and OpenWork gates feature usage
 # on this semver (see apps/server/src/sofia-version.ts), so binaries built from
 # this release may be rejected by those upstream clients.
-version = "0.1.1"
+version = "0.1.2"
 # Track the edition for all workspace crates in one place. Individual
 # crates can still override this value, but keeping it here means new
 # crates created with `cargo new -w ...` automatically inherit the 2024
