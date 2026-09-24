@@ -480,6 +480,10 @@ pub async fn run_main_with_transport_options(
         loader_overrides,
         test_user_config_file_from_env(),
     )?;
+    let loader_overrides = loader_overrides_with_app_config_file(
+        loader_overrides,
+        std::env::var_os("SOFIA_APP_CONFIG_FILE").map(std::path::PathBuf::from),
+    )?;
     let (transport_event_tx, mut transport_event_rx) =
         mpsc::channel::<TransportEvent>(CHANNEL_CAPACITY);
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(CHANNEL_CAPACITY);
@@ -1365,6 +1369,20 @@ fn emit_state_db_backup_warning(message: &str) {
     }
 }
 
+/// Select an embedding app's configuration without moving its shared session
+/// home. The path must be absolute so it cannot resolve against the workspace.
+fn loader_overrides_with_app_config_file(
+    mut overrides: LoaderOverrides,
+    path: Option<std::path::PathBuf>,
+) -> IoResult<LoaderOverrides> {
+    if let Some(path) = path {
+        overrides.user_config_path = Some(AbsolutePathBuf::from_absolute_path_checked(path).map_err(|err| {
+            std::io::Error::new(ErrorKind::InvalidInput, format!("invalid SOFIA_APP_CONFIG_FILE: {err}"))
+        })?);
+    }
+    Ok(overrides)
+}
+
 fn test_user_config_file_from_env() -> Option<std::path::PathBuf> {
     #[cfg(debug_assertions)]
     {
@@ -1414,13 +1432,24 @@ fn analytics_rpc_transport(transport: &AppServerTransport) -> AppServerRpcTransp
 #[cfg(test)]
 mod tests {
     use super::LogFormat;
+    use super::loader_overrides_with_app_config_file;
     #[cfg(debug_assertions)]
     use super::loader_overrides_with_test_user_config_file;
     use pretty_assertions::assert_eq;
-    #[cfg(debug_assertions)]
     use sofia_config::LoaderOverrides;
-    #[cfg(debug_assertions)]
     use sofia_utils_absolute_path::AbsolutePathBuf;
+
+    #[test]
+    fn embedding_app_config_is_absolute_and_preserves_home_independence() {
+        let path = std::env::temp_dir().join("sofia-workspace-config.toml");
+        let overrides = loader_overrides_with_app_config_file(
+            LoaderOverrides::default(), Some(path.clone()),
+        ).expect("absolute app config");
+        assert_eq!(overrides.user_config_path, Some(AbsolutePathBuf::from_absolute_path(path).unwrap()));
+        assert!(loader_overrides_with_app_config_file(
+            LoaderOverrides::default(), Some(std::path::PathBuf::from("relative.toml")),
+        ).is_err());
+    }
 
     #[test]
     fn log_format_from_env_value_matches_json_values_case_insensitively() {
