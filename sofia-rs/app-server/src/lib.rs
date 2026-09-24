@@ -10,7 +10,6 @@ use sofia_core::config::Config;
 use sofia_core::config::UnsupportedUntrustedApprovalPolicyError;
 use sofia_core::resolve_installation_id;
 use sofia_login::AuthManager;
-#[cfg(debug_assertions)]
 use sofia_utils_absolute_path::AbsolutePathBuf;
 use sofia_utils_cli::CliConfigOverrides;
 use std::collections::HashMap;
