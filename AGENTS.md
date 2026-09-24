@@ -67,6 +67,12 @@ Run `just fmt` (in the `sofia-rs` directory) automatically after you have finish
 2. Run the test for the specific project that was changed. For example, if changes were made in `sofia-rs/tui`, run `just test -p sofia-tui`.
 3. Once those pass, if any changes were made in common, core, or protocol, run the complete test suite with `just test`. Avoid `--all-features` for routine local runs because it expands the build matrix and can significantly increase `target/` disk usage; use it only when you specifically need full feature coverage. project-specific or individual tests can be run without asking the user, but do ask the user before running the complete test suite.
 
+`sofia-core` integration tests run `exec` through `sofia-code-mode-host`, which they resolve from the
+target directory rather than from one of `sofia-core`'s own targets. Run `cargo build -p
+sofia-code-mode-host` once before the first core test run: without that binary, code mode silently
+falls back to direct tools and the code-mode tests fail with unrelated-looking errors such as
+`unsupported custom tool call: exec`.
+
 Before finalizing a large change to `sofia-rs`, run `just fix -p <project>` (in `sofia-rs` directory) to fix any linter issues in the code. Prefer scoping with `-p` to avoid slow workspace‑wide Clippy builds; only run `just fix` without `-p` if you changed shared crates. Do not re-run tests after running `fix` or `fmt`.
 
 ## The `sofia-core` crate

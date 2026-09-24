@@ -36,7 +36,7 @@ fn parse_verdict_fails_open_on_unparseable_output() {
 
 #[test]
 fn render_transcript_includes_goal_tool_activity_and_final_message() {
-    let items = vec![
+    let items = [
         ResponseItem::FunctionCall {
             id: None,
             name: "exec_command".to_string(),

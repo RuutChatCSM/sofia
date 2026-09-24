@@ -269,7 +269,7 @@ fn render_transcript(items: &[&ResponseItem], goal: &str, last_message: Option<&
 fn render_item(item: &ResponseItem) -> Option<String> {
     match item {
         ResponseItem::Message { role, content, .. } => {
-            if role != "assistant" {
+            if role != "assistant" && role != "user" {
                 return None;
             }
             let text = content
@@ -286,10 +286,7 @@ fn render_item(item: &ResponseItem) -> Option<String> {
             if text.is_empty() {
                 return None;
             }
-            Some(format!(
-                "[assistant] {}",
-                truncate(text, MAX_ASSISTANT_CHARS)
-            ))
+            Some(format!("[{role}] {}", truncate(text, MAX_ASSISTANT_CHARS)))
         }
         ResponseItem::FunctionCall {
             name, arguments, ..

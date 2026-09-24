@@ -37,6 +37,7 @@ use sofia_tools::ToolSearchInfo;
 use sofia_tools::ToolSearchSourceInfo;
 use sofia_tools::ToolSpec;
 use sofia_tools::agent_plugin_mcp_tool_to_responses_api_tool;
+use sofia_tools::flat_namespace_tool_name;
 use sofia_tools::mcp_tool_to_responses_api_tool;
 use sofia_utils_image::PromptImageMode;
 use sofia_utils_image::load_data_url_for_prompt_uncached;
@@ -44,7 +45,6 @@ use sofia_utils_output_truncation::TruncationPolicy;
 use sofia_utils_string::take_bytes_at_char_boundary;
 
 const LEGACY_MCP_TOOL_NAME_PREFIX: &str = "mcp__";
-const MCP_TOOL_NAME_DELIMITER: &str = "__";
 const MAX_AGENT_PLUGIN_MCP_NAMESPACE_DESCRIPTION_BYTES: usize = 1_000;
 const MAX_MCP_NAMESPACE_DESCRIPTION_BYTES: usize = 512 * 1024;
 
@@ -99,11 +99,7 @@ impl McpHandler {
 
 fn join_tool_name(tool_name: &ToolName) -> String {
     match tool_name.namespace.as_deref() {
-        Some(namespace) => {
-            let namespace = namespace.trim_end_matches('_');
-            let name = tool_name.name.trim_start_matches('_');
-            format!("{namespace}{MCP_TOOL_NAME_DELIMITER}{name}")
-        }
+        Some(namespace) => flat_namespace_tool_name(namespace, &tool_name.name),
         None => tool_name.name.clone(),
     }
 }

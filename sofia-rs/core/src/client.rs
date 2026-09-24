@@ -89,8 +89,11 @@ use sofia_protocol::ThreadId;
 use sofia_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use sofia_protocol::config_types::Verbosity as VerbosityConfig;
 use sofia_protocol::models::ContentItem;
+use sofia_protocol::models::FunctionCallOutputContentItem;
+use sofia_protocol::models::FunctionCallOutputPayload;
 use sofia_protocol::models::ReasoningItemContent;
 use sofia_protocol::models::ResponseItem;
+use sofia_protocol::models::function_call_output_content_items_to_text;
 use sofia_protocol::openai_models::ModelInfo;
 use sofia_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use sofia_protocol::protocol::AuthRecoveryEvent;
@@ -2313,8 +2316,7 @@ impl ModelClientSession {
                             continue;
                         }
                         return Err(CodexErr::from(CodexErrorDetails::Stream(format!(
-                            "chat completions request failed after {} retries: {e}",
-                            max_retries
+                            "chat completions request failed after {max_retries} retries: {e}"
                         ))));
                     }
                 }
@@ -2408,31 +2410,29 @@ impl ModelClientSession {
                         for choice in choices {
                             if let Some(delta) = choice.get("delta") {
                                 // Text content.
-                                if let Some(text) = delta.get("content").and_then(|c| c.as_str()) {
-                                    if !text.is_empty() {
-                                        if !text_started {
-                                            text_started = true;
-                                            let _ = tx
-                                                .send(Ok(ResponseEvent::OutputItemAdded(
-                                                    ResponseItem::Message {
-                                                        id: Some(text_item_id.clone()),
-                                                        role: "assistant".to_string(),
-                                                        content: Vec::new(),
-                                                        phase: None,
-                                                        internal_chat_message_metadata_passthrough:
-                                                            None,
-                                                    },
-                                                )))
-                                                .await;
-                                        }
-                                        text_content.push_str(text);
-                                        text_delta_count += 1;
+                                if let Some(text) = delta.get("content").and_then(|c| c.as_str())
+                                    && !text.is_empty()
+                                {
+                                    if !text_started {
+                                        text_started = true;
                                         let _ = tx
-                                            .send(Ok(ResponseEvent::OutputTextDelta(
-                                                text.to_string(),
+                                            .send(Ok(ResponseEvent::OutputItemAdded(
+                                                ResponseItem::Message {
+                                                    id: Some(text_item_id.clone()),
+                                                    role: "assistant".to_string(),
+                                                    content: Vec::new(),
+                                                    phase: None,
+                                                    internal_chat_message_metadata_passthrough:
+                                                        None,
+                                                },
                                             )))
                                             .await;
                                     }
+                                    text_content.push_str(text);
+                                    text_delta_count += 1;
+                                    let _ = tx
+                                        .send(Ok(ResponseEvent::OutputTextDelta(text.to_string())))
+                                        .await;
                                 }
                                 // Reasoning content.
                                 if let Some(reasoning) = delta
@@ -2479,8 +2479,10 @@ impl ModelClientSession {
                                     delta.get("tool_calls").and_then(|t| t.as_array())
                                 {
                                     for tc in tool_calls {
-                                        let index =
-                                            tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+                                        let index = tc
+                                            .get("index")
+                                            .and_then(serde_json::Value::as_u64)
+                                            .unwrap_or(0);
                                         let entry =
                                             tool_call_buffers.entry(index).or_insert_with(|| {
                                                 (
@@ -2493,15 +2495,16 @@ impl ModelClientSession {
                                             .get("function")
                                             .and_then(|f| f.get("name"))
                                             .and_then(|n| n.as_str())
+                                            && !name.is_empty()
+                                            && entry.1.is_empty()
                                         {
-                                            if !name.is_empty() && entry.1.is_empty() {
-                                                // First time we see the name — emit
-                                                // OutputItemAdded so the TUI shows the
-                                                // tool call cell right away.
-                                                tool_call_index_count += 1;
-                                                debug!(name = %name, index, "stream_chat_completions_api: tool call started");
-                                                entry.1 = name.to_string();
-                                                let _ = tx
+                                            // First time we see the name — emit
+                                            // OutputItemAdded so the TUI shows the
+                                            // tool call cell right away.
+                                            tool_call_index_count += 1;
+                                            debug!(name = %name, index, "stream_chat_completions_api: tool call started");
+                                            entry.1 = name.to_string();
+                                            let _ = tx
                                                     .send(Ok(ResponseEvent::OutputItemAdded(
                                                         ResponseItem::FunctionCall {
                                                             id: None,
@@ -2514,7 +2517,6 @@ impl ModelClientSession {
                                                         },
                                                     )))
                                                     .await;
-                                            }
                                         }
                                         if let Some(args) = tc
                                             .get("function")
@@ -2527,11 +2529,11 @@ impl ModelClientSession {
                                 }
                             }
                             // Track finish_reason from the response.
-                            if let Some(fr) = choice.get("finish_reason").and_then(|r| r.as_str()) {
-                                if !fr.is_empty() {
-                                    info!(finish_reason = %fr, "stream_chat_completions_api: finish_reason received");
-                                    finish_reason = Some(fr.to_string());
-                                }
+                            if let Some(fr) = choice.get("finish_reason").and_then(|r| r.as_str())
+                                && !fr.is_empty()
+                            {
+                                info!(finish_reason = %fr, "stream_chat_completions_api: finish_reason received");
+                                finish_reason = Some(fr.to_string());
                             }
                         }
                     }
@@ -2542,15 +2544,15 @@ impl ModelClientSession {
                     if let Some(usage_obj) = parsed.get("usage").and_then(|u| u.as_object()) {
                         let input_tokens = usage_obj
                             .get("prompt_tokens")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .unwrap_or(0) as i64;
                         let output_tokens = usage_obj
                             .get("completion_tokens")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .unwrap_or(0) as i64;
                         let total_tokens = usage_obj
                             .get("total_tokens")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .unwrap_or((input_tokens + output_tokens) as u64)
                             as i64;
                         token_usage = Some(sofia_protocol::protocol::TokenUsage {
@@ -3451,6 +3453,37 @@ fn log_chat_completions_request_body(
     }
 }
 
+/// Chat Completions carries a tool result as a single string.
+///
+/// Tool outputs that arrive as content items - every MCP result, including the
+/// in-app browser harness - have no `text_content`, so sending only
+/// `text_content()` would hand the model an empty tool result. Flatten the text
+/// items instead, and say so explicitly when multimodal items cannot cross the
+/// text-only wire.
+fn chat_completions_tool_content(output: &FunctionCallOutputPayload) -> String {
+    if let Some(text) = output.text_content().filter(|text| !text.is_empty()) {
+        return text.to_string();
+    }
+
+    let Some(items) = output.content_items() else {
+        return String::new();
+    };
+    let mut content = function_call_output_content_items_to_text(items).unwrap_or_default();
+    let omitted = items
+        .iter()
+        .filter(|item| !matches!(item, FunctionCallOutputContentItem::InputText { .. }))
+        .count();
+    if omitted > 0 {
+        if !content.is_empty() {
+            content.push('\n');
+        }
+        content.push_str(&format!(
+            "<{omitted} non-text content item(s) omitted: this tool result is text-only>"
+        ));
+    }
+    content
+}
+
 /// Build a Chat Completions request body from the internal prompt format.
 fn build_chat_completions_body(
     prompt: &Prompt,
@@ -3600,7 +3633,7 @@ fn build_chat_completions_body(
                         &pending_reasoning_content,
                     ));
                 }
-                let content = output.text_content().unwrap_or("");
+                let content = chat_completions_tool_content(output);
                 messages.push(json!({
                     "role": "tool",
                     "tool_call_id": call_id,
@@ -3650,7 +3683,7 @@ fn build_chat_completions_body(
             && message
                 .get("tool_calls")
                 .and_then(|tc| tc.as_array())
-                .is_none_or(|tc| tc.is_empty())
+                .is_none_or(std::vec::Vec::is_empty)
         {
             return false;
         }
@@ -3661,7 +3694,7 @@ fn build_chat_completions_body(
             && message
                 .get("content")
                 .and_then(|c| c.as_str())
-                .is_none_or(|c| c.is_empty())
+                .is_none_or(str::is_empty)
         {
             message["content"] = json!("Continue.");
         }
@@ -3692,22 +3725,22 @@ fn build_chat_completions_body(
     // Reasoning effort — only send when the model supports it. Non-OpenAI
     // providers (xiaomi, groq, etc.) reject unknown top-level parameters with
     // a 400 Bad Request.
-    if let Some(effort) = effort {
-        if !model_info.supported_reasoning_levels.is_empty() {
-            let effort_str = match effort {
-                ReasoningEffortConfig::None => "none",
-                ReasoningEffortConfig::Minimal => "minimal",
-                ReasoningEffortConfig::Low => "low",
-                ReasoningEffortConfig::Medium => "medium",
-                ReasoningEffortConfig::High => "high",
-                ReasoningEffortConfig::XHigh => "high",
-                ReasoningEffortConfig::Max => "max",
-                ReasoningEffortConfig::Ultra => "max",
-                ReasoningEffortConfig::Custom(s) => s.as_str(),
-                ReasoningEffortConfig::Persistent => "persistent",
-            };
-            request["reasoning_effort"] = json!(effort_str);
-        }
+    if let Some(effort) = effort
+        && !model_info.supported_reasoning_levels.is_empty()
+    {
+        let effort_str = match effort {
+            ReasoningEffortConfig::None => "none",
+            ReasoningEffortConfig::Minimal => "minimal",
+            ReasoningEffortConfig::Low => "low",
+            ReasoningEffortConfig::Medium => "medium",
+            ReasoningEffortConfig::High => "high",
+            ReasoningEffortConfig::XHigh => "high",
+            ReasoningEffortConfig::Max => "max",
+            ReasoningEffortConfig::Ultra => "max",
+            ReasoningEffortConfig::Custom(s) => s.as_str(),
+            ReasoningEffortConfig::Persistent => "persistent",
+        };
+        request["reasoning_effort"] = json!(effort_str);
     }
 
     // Tools.

@@ -42,6 +42,7 @@ use sofia_rollout::state_db;
 use sofia_shell_command::parse_command::parse_shell_script;
 use sofia_tools::ToolName;
 use sofia_tools::ToolSpec;
+use sofia_tools::flat_namespace_tool_name;
 
 pub(crate) type ToolTelemetryTags = Vec<(&'static str, String)>;
 
@@ -457,9 +458,32 @@ impl ToolRegistry {
     }
 
     pub(crate) fn tool(&self, name: &ToolName) -> Option<Arc<dyn CoreToolRuntime>> {
-        self.tools
-            .get(&name.clone().with_default_namespace())
-            .map(|tool| Arc::clone(&tool.runtime))
+        self.entry(name).map(|tool| Arc::clone(&tool.runtime))
+    }
+
+    /// Resolve a tool by the name the model actually called.
+    ///
+    /// Wires without namespace declarations (Chat Completions) publish
+    /// namespaced tools under their flat `namespace__name` identity, so the model
+    /// can only call them back by that flat name. Every lookup has to agree on
+    /// that, or a tool resolves for dispatch but not for its call metadata.
+    fn entry(&self, name: &ToolName) -> Option<&RegisteredTool> {
+        let key = name.clone().with_default_namespace();
+        if let Some(tool) = self.tools.get(&key) {
+            return Some(tool);
+        }
+        if !key.is_default_namespace() {
+            return None;
+        }
+        self.tools.iter().find_map(|(tool_name, tool)| {
+            tool_name
+                .namespace
+                .as_deref()
+                .is_some_and(|namespace| {
+                    flat_namespace_tool_name(namespace, &tool_name.name) == key.name
+                })
+                .then_some(tool)
+        })
     }
 
     #[cfg(test)]
@@ -484,7 +508,7 @@ impl ToolRegistry {
     }
 
     pub(crate) fn supports_parallel_tool_calls(&self, name: &ToolName) -> Option<bool> {
-        let tool = self.tools.get(&name.clone().with_default_namespace())?;
+        let tool = self.entry(name)?;
         Some(tool.exposure != ToolExposure::Hidden && tool.runtime.supports_parallel_tool_calls())
     }
 

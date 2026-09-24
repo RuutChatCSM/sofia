@@ -204,18 +204,27 @@ pub async fn load_default_config_for_test(sofia_home: &TempDir) -> Config {
 
 /// Returns a default `Config` with test-provided cloud bundle requirements applied.
 /// during config construction.
+///
+/// The goal stop-condition judge is disabled here even though production
+/// defaults it on: it issues a second model call at the end of every turn, so a
+/// hermetic mock server that only scripts the expected conversation would see an
+/// unscripted request (404, or an SSE item consumed out of order). Tests that
+/// exercise the judge opt in with `Config::goal_judge_enabled = true` and script
+/// the judge reply alongside the rest of their turns.
 pub async fn load_default_config_for_test_with_cloud_config_bundle(
     sofia_home: &TempDir,
     cloud_config_bundle: CloudConfigBundleLoader,
 ) -> Config {
-    ConfigBuilder::default()
+    let mut config = ConfigBuilder::default()
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .sofia_home(sofia_home.path().to_path_buf())
         .harness_overrides(default_test_overrides())
         .cloud_config_bundle(cloud_config_bundle)
         .build()
         .await
-        .expect("defaults for test should always succeed")
+        .expect("defaults for test should always succeed");
+    config.goal_judge_enabled = false;
+    config
 }
 
 pub fn managed_network_requirements_loader() -> CloudConfigBundleLoader {

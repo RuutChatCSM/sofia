@@ -15,6 +15,31 @@ use sofia_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLo
 use sofia_protocol::config_types::WebSearchUserLocationType;
 use std::sync::Arc;
 
+/// Delimiter used to join a tool namespace with a tool name on wires that
+/// cannot declare namespaces.
+pub const FLAT_TOOL_NAME_DELIMITER: &str = "__";
+
+/// The flat, wire-level identifier for a namespaced tool.
+///
+/// The Responses API declares tool namespaces and calls a tool as
+/// `namespace` + `name`. Chat Completions can only name a tool with a single
+/// string, so those wires see the joined `namespace__name` identity — the
+/// historical MCP `mcp__<server>__<tool>` shape. Tools in the default function
+/// namespace keep their bare name.
+pub fn flat_namespace_tool_name(namespace: &str, name: &str) -> String {
+    let namespace = namespace.trim_end_matches('_');
+    if namespace.is_empty() || namespace == DEFAULT_FUNCTION_NAMESPACE {
+        return name.trim_start_matches('_').to_string();
+    }
+
+    let name = name.trim_start_matches('_');
+    if name.is_empty() {
+        return namespace.to_string();
+    }
+
+    format!("{namespace}{FLAT_TOOL_NAME_DELIMITER}{name}")
+}
+
 /// When serialized as JSON, this produces a valid "Tool" in the OpenAI
 /// Responses API.
 #[derive(Debug, Clone, Serialize, PartialEq)]

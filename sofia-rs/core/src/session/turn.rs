@@ -681,16 +681,12 @@ pub(crate) async fn run_turn(
                     // Goal stop-condition judge: before honoring the stop, ask a
                     // judge model whether the user's request is complete. If not,
                     // inject its reason as a synthetic user turn and keep
-                    // working. Bounded per turn and fail-open (mirrors
-                    // mimocode's `goalGate`). Skipped when the model handed
-                    // control back with a question, for internal sessions, or
-                    // when there is no textual goal to judge against.
+                    // working. The judge distinguishes a required user decision
+                    // from a premature handoff; punctuation cannot do that (a
+                    // progress note or quoted code may contain a question mark).
                     if turn_context.config.goal_judge_enabled
                         && !turn_goal.trim().is_empty()
                         && !matches!(turn_context.session_source, SessionSource::Internal(_))
-                        && !last_agent_message
-                            .as_deref()
-                            .is_some_and(|message| message.contains('?') || message.contains('？'))
                     {
                         match crate::goal_judge::judge_goal(
                             &sess,
@@ -726,8 +722,15 @@ pub(crate) async fn run_turn(
                                     .await;
                                 continue;
                             }
-                            crate::goal_judge::GoalVerdict::AcceptStop
-                            | crate::goal_judge::GoalVerdict::FailOpen => {}
+                            crate::goal_judge::GoalVerdict::AcceptStop => {}
+                            crate::goal_judge::GoalVerdict::FailOpen => {
+                                sess.send_event(
+                                    &turn_context,
+                                    EventMsg::Warning(WarningEvent {
+                                        message: "Sofia stopped without confirming task completion: the completion check was unavailable or its continuation limit was reached.".to_string(),
+                                    }),
+                                ).await;
+                            }
                         }
                     }
                     break;

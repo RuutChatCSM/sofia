@@ -66,6 +66,7 @@ use sofia_extension_api::ExtensionData;
 use sofia_features::Feature;
 use sofia_features::SleepToolMode;
 use sofia_login::AuthManager;
+use sofia_model_provider_info::WireApi;
 use sofia_protocol::DEFAULT_FUNCTION_NAMESPACE;
 use sofia_protocol::account::PlanType;
 use sofia_protocol::config_types::WebSearchMode;
@@ -95,6 +96,7 @@ use sofia_tools::can_request_original_image_detail;
 use sofia_tools::collect_code_mode_exec_prompt_tool_definitions;
 use sofia_tools::collect_request_plugin_install_entries;
 use sofia_tools::default_namespace_description;
+use sofia_tools::flat_namespace_tool_name;
 use sofia_tools::request_user_input_available_modes;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -559,12 +561,42 @@ fn build_model_visible_specs(
     }
     specs.extend(hosted_specs);
 
-    merge_into_namespaces(specs)
-        .into_iter()
-        .filter(|spec| {
-            namespace_tools_enabled(turn_context) || !matches!(spec, ToolSpec::Namespace(_))
-        })
-        .collect()
+    let specs = merge_into_namespaces(specs);
+    if namespace_tools_enabled(turn_context) {
+        specs
+    } else {
+        flatten_namespace_specs(specs)
+    }
+}
+
+/// Inline every namespace spec as a flat top-level function named
+/// `namespace__name`.
+///
+/// Used for providers whose wire cannot declare namespaces, so the tools inside
+/// a namespace stay callable instead of disappearing from the model's tool list.
+fn flatten_namespace_specs(specs: Vec<ToolSpec>) -> Vec<ToolSpec> {
+    let mut flattened = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let ToolSpec::Namespace(namespace) = spec else {
+            flattened.push(spec);
+            continue;
+        };
+        for tool in namespace.tools {
+            match tool {
+                ResponsesApiNamespaceTool::Function(mut tool) => {
+                    tool.name = flat_namespace_tool_name(&namespace.name, &tool.name);
+                    if tool.description.trim().is_empty() {
+                        tool.description = namespace.description.clone();
+                    }
+                    flattened.push(ToolSpec::Function(tool));
+                }
+                // Freeform tools have no Chat Completions representation, so
+                // they stay unavailable on these wires.
+                ResponsesApiNamespaceTool::Custom(_) => {}
+            }
+        }
+    }
+    flattened
 }
 
 fn spec_for_model_request(
@@ -639,6 +671,21 @@ pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
 
 fn namespace_tools_enabled(turn_context: &TurnContext) -> bool {
     turn_context.provider.capabilities().namespace_tools
+        && wire_supports_tool_namespaces(turn_context)
+}
+
+/// Whether the provider's wire can declare tool namespaces at all.
+///
+/// Chat Completions names a tool with a single string, so namespace specs are
+/// flattened into flat `namespace__name` functions there (see
+/// [`flatten_namespace_specs`]). Everything else — tool search, code-mode
+/// nesting, namespace declarations — depends on the provider being able to
+/// declare namespaces.
+fn wire_supports_tool_namespaces(turn_context: &TurnContext) -> bool {
+    !matches!(
+        turn_context.provider.info().wire_api,
+        WireApi::ChatCompletions
+    )
 }
 
 fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {

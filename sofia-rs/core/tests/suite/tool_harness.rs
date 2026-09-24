@@ -4,6 +4,7 @@ use core_test_support::test_codex::local_selections;
 use sofia_core::TurnInputRequest;
 use std::fs;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
@@ -20,13 +21,16 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
+use core_test_support::skip_if_wine_exec;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_with_timeout;
+use core_test_support::wait_for_mcp_server;
 use serde_json::Value;
 use serde_json::json;
+use sofia_config::Constrained;
 use sofia_model_provider_info::WireApi;
 use sofia_protocol::config_types::CollaborationMode;
 use sofia_protocol::config_types::ModeKind;
@@ -220,6 +224,10 @@ async fn chat_completions_tool_call_continues_and_final_text_stops() -> anyhow::
         .with_model("test-gpt-5-sofia")
         .with_config(|config| {
             config.model_provider.wire_api = WireApi::ChatCompletions;
+            // This case asserts the exact request sequence, which includes the
+            // native goal-judge call; the shared test config leaves the judge
+            // off by default.
+            config.goal_judge_enabled = true;
         });
     let TestCodex {
         sofia,
@@ -320,36 +328,24 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
     // budget and the turn ends instead of re-prompting forever.
     let narration = "The controller still calls the renamed method without the new parameter. \
         I need to restore the old method as a public wrapper and check what the identity block \
-        method outputs now, then run the relevant specs before continuing.";
+        method outputs now, then run the relevant specs before continuing. What remains? Let me inspect the wrapper.";
     assert!(
         narration.chars().count() > 200,
         "exercise the long-narration path"
     );
-    let narration_responses: Vec<String> = (0..4)
-        .map(|_| {
-            format!(
-                "data: {}\n\ndata: [DONE]\n\n",
-                json!({
-                    "id": "chatcmpl-narration",
-                    "choices": [{
-                        "index": 0,
-                        "delta": { "content": narration },
-                        "finish_reason": "stop",
-                    }],
-                })
-            )
-        })
-        .collect();
-
     Mock::given(method("POST"))
         .and(path("/v1/chat/completions"))
-        .respond_with(move |_request: &wiremock::Request| {
-            let body = narration_responses[response_count.fetch_add(1, Ordering::SeqCst)].clone();
-            ResponseTemplate::new(/*status*/ 200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(body)
+        .respond_with(move |request: &wiremock::Request| {
+            response_count.fetch_add(1, Ordering::SeqCst);
+            let body: Value = serde_json::from_slice(&request.body).unwrap();
+            let is_judge = body["messages"][0]["content"].as_str().unwrap_or_default().contains("strict judge");
+            let text = if is_judge { "INCOMPLETE: inspect the wrapper and report findings" } else { narration };
+            ResponseTemplate::new(200).insert_header("content-type", "text/event-stream")
+                .set_body_string(format!("data: {}\n\ndata: [DONE]\n\n", json!({
+                    "id": "judge-budget", "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}]
+                })))
         })
-        .expect(/*requests*/ 4)
+        .expect(7)
         .mount(&server)
         .await;
 
@@ -357,6 +353,8 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
         .with_model("test-gpt-5-sofia")
         .with_config(|config| {
             config.model_provider.wire_api = WireApi::ChatCompletions;
+            config.goal_judge_enabled = true;
+            config.goal_judge_budget = 3;
         });
     let TestCodex {
         sofia,
@@ -403,19 +401,35 @@ async fn chat_completions_narration_only_stop_is_force_continued_and_bounded() -
     // Exactly the budgeted number of sampling requests: 1 original + 3 forced
     // continuations. The 4th narration-only stop is not re-prompted, proving
     // the continuation is bounded and cannot loop forever.
-    assert_eq!(request_count.load(Ordering::SeqCst), 4);
+    assert_eq!(request_count.load(Ordering::SeqCst), 7);
     server.verify().await;
 
     let requests = server.received_requests().await.unwrap();
-    for (index, request) in requests.iter().enumerate().skip(1) {
-        let body: Value = serde_json::from_slice(&request.body)?;
-        let messages = body["messages"].as_array().unwrap();
-        // Each continuation feeds the prior narration-only assistant message
-        // back so the re-sampled request continues from the same step.
-        assert_eq!(
-            messages.last().unwrap()["role"],
-            "assistant",
-            "request {index}"
+    let continuations: Vec<Value> = requests
+        .iter()
+        .filter(|request| request.method.as_str() == "POST")
+        .map(|request| serde_json::from_slice::<Value>(&request.body).unwrap())
+        .filter(|body| {
+            !body["messages"][0]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("strict judge")
+        })
+        .filter(|body| {
+            body["messages"].as_array().unwrap().last().unwrap()["content"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Your goal is not yet complete")
+        })
+        .collect();
+    assert_eq!(continuations.len(), 3);
+    for body in continuations {
+        assert!(
+            body["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|message| message["role"] == "assistant" && message["content"] == narration)
         );
     }
 
@@ -492,13 +506,15 @@ async fn chat_completions_stop_after_failed_tool_is_force_continued() -> anyhow:
             let body = match response_count.fetch_add(1, Ordering::SeqCst) {
                 0 => tool_response.clone(),
                 1 => failure_response.clone(),
-                _ => handback_response.clone(),
+                2 => format!("data: {}\n\ndata: [DONE]\n\n", json!({"id": "judge", "choices": [{"index": 0, "delta": {"content": "INCOMPLETE: complete the authorized verification"}, "finish_reason": "stop"}]})),
+                3 => handback_response.clone(),
+                _ => format!("data: {}\n\ndata: [DONE]\n\n", json!({"id": "judge", "choices": [{"index": 0, "delta": {"content": "SATISFIED"}, "finish_reason": "stop"}]})),
             };
             ResponseTemplate::new(/*status*/ 200)
                 .insert_header("content-type", "text/event-stream")
                 .set_body_string(body)
         })
-        .expect(/*requests*/ 3)
+        .expect(/*requests*/ 5)
         .mount(&server)
         .await;
 
@@ -506,6 +522,10 @@ async fn chat_completions_stop_after_failed_tool_is_force_continued() -> anyhow:
         .with_model("test-gpt-5-sofia")
         .with_config(|config| {
             config.model_provider.wire_api = WireApi::ChatCompletions;
+            // This case asserts the exact request sequence, which includes the
+            // native goal-judge call; the shared test config leaves the judge
+            // off by default.
+            config.goal_judge_enabled = true;
         });
     let TestCodex {
         sofia,
@@ -566,7 +586,7 @@ async fn chat_completions_stop_after_failed_tool_is_force_continued() -> anyhow:
     assert!(saw_handback);
     // Original tool-call response + the narration report that was force-continued
     // + the handback question that finally terminates the turn.
-    assert_eq!(request_count.load(Ordering::SeqCst), 3);
+    assert_eq!(request_count.load(Ordering::SeqCst), 5);
     server.verify().await;
 
     Ok(())
@@ -638,13 +658,15 @@ async fn chat_completions_mutation_then_completed_outcome_is_force_continued() -
             let body = match response_count.fetch_add(1, Ordering::SeqCst) {
                 0 => tool_response.clone(),
                 1 => applied_response.clone(),
-                _ => handback_response.clone(),
+                2 => format!("data: {}\n\ndata: [DONE]\n\n", json!({"id": "judge", "choices": [{"index": 0, "delta": {"content": "INCOMPLETE: complete the authorized verification"}, "finish_reason": "stop"}]})),
+                3 => handback_response.clone(),
+                _ => format!("data: {}\n\ndata: [DONE]\n\n", json!({"id": "judge", "choices": [{"index": 0, "delta": {"content": "SATISFIED"}, "finish_reason": "stop"}]})),
             };
             ResponseTemplate::new(/*status*/ 200)
                 .insert_header("content-type", "text/event-stream")
                 .set_body_string(body)
         })
-        .expect(/*requests*/ 3)
+        .expect(/*requests*/ 5)
         .mount(&server)
         .await;
 
@@ -652,6 +674,10 @@ async fn chat_completions_mutation_then_completed_outcome_is_force_continued() -
         .with_model("test-gpt-5-sofia")
         .with_config(|config| {
             config.model_provider.wire_api = WireApi::ChatCompletions;
+            // This case asserts the exact request sequence, which includes the
+            // native goal-judge call; the shared test config leaves the judge
+            // off by default.
+            config.goal_judge_enabled = true;
         });
     let TestCodex {
         sofia,
@@ -712,7 +738,7 @@ async fn chat_completions_mutation_then_completed_outcome_is_force_continued() -
     assert!(saw_handback);
     // apply_patch tool-call + the completed-outcome claim that was force-continued
     // (bare mutation != verified) + the handback question that finally terminates.
-    assert_eq!(request_count.load(Ordering::SeqCst), 3);
+    assert_eq!(request_count.load(Ordering::SeqCst), 5);
     server.verify().await;
 
     Ok(())
@@ -1126,5 +1152,197 @@ async fn apply_patch_reports_parse_diagnostics() -> anyhow::Result<()> {
         );
     }
 
+    Ok(())
+}
+
+/// The Chat Completions wire cannot declare tool namespaces, so the plan has to
+/// inline each MCP tool as a flat `namespace__name` function and route the flat
+/// call back to the namespaced handler. Without that, the server stays connected
+/// and its tools are silently dropped from the model's tool list, and an agent
+/// asked to browse reaches for a separate browser instead of the in-app one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_completions_wire_exposes_mcp_tools_by_flat_name() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_wine_exec!(Ok(()), "requires a native test_stdio_server");
+
+    const SERVER_NAME: &str = "probe_server";
+    const FLAT_TOOL_NAME: &str = "mcp__probe_server__echo";
+    const FLAT_TEXT_TOOL_NAME: &str = "mcp__probe_server__image_scenario";
+    const CALL_ID: &str = "chatcmpl-flat-call";
+    const TEXT_CALL_ID: &str = "chatcmpl-flat-text-call";
+
+    let server = start_mock_server().await;
+    let request_bodies = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let recorder = Arc::clone(&request_bodies);
+    let response_count = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&response_count);
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |request: &wiremock::Request| {
+            recorder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(serde_json::from_slice(&request.body).unwrap_or(Value::Null));
+            let delta = if counter.fetch_add(1, Ordering::SeqCst) == 0 {
+                json!({
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": CALL_ID,
+                            "type": "function",
+                            "function": {
+                                "name": FLAT_TOOL_NAME,
+                                "arguments": "{\"message\":\"ping\"}",
+                            },
+                        },
+                        {
+                            "index": 1,
+                            "id": TEXT_CALL_ID,
+                            "type": "function",
+                            "function": {
+                                "name": FLAT_TEXT_TOOL_NAME,
+                                "arguments":
+                                    "{\"scenario\":\"text_only\",\"caption\":\"content item fixture result\"}",
+                            },
+                        },
+                    ],
+                })
+            } else {
+                json!({ "content": "done" })
+            };
+            ResponseTemplate::new(/*status*/ 200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(format!(
+                    "data: {}\n\ndata: [DONE]\n\n",
+                    json!({
+                        "id": "chatcmpl-mcp-flat",
+                        "choices": [{ "index": 0, "delta": delta, "finish_reason": "stop" }],
+                    })
+                ))
+        })
+        .mount(&server)
+        .await;
+
+    let command = core_test_support::stdio_server_bin()?;
+    let fixture = test_codex()
+        .with_model_info_override("gpt-5.4", |model| model.supports_search_tool = true)
+        .with_config(move |config| {
+            config.model_provider.wire_api = WireApi::ChatCompletions;
+            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+            config
+                .permissions
+                .set_permission_profile(PermissionProfile::Disabled)
+                .expect("test thread should accept disabled permissions");
+            let mut servers = config.mcp_servers.get().clone();
+            servers.insert(
+                SERVER_NAME.to_string(),
+                serde_json::from_value(json!({
+                    "command": command,
+                    "enabled_tools": ["echo", "image_scenario"],
+                    "startup_timeout_sec": 10,
+                }))
+                .expect("test MCP server config should deserialize"),
+            );
+            config
+                .mcp_servers
+                .set(servers)
+                .expect("test thread should accept its MCP servers");
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    let TestCodex { sofia, cwd, .. } = fixture;
+    wait_for_mcp_server(&sofia, SERVER_NAME).await?;
+
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+    sofia
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "Echo ping from the configured MCP server.".into(),
+                text_elements: Vec::new(),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                ..Default::default()
+            }),
+        )
+        .await?;
+    wait_for_event(&sofia, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+
+    let bodies = request_bodies
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let first_request = bodies
+        .first()
+        .expect("the turn should issue a chat completions request");
+    let tools = first_request["tools"]
+        .as_array()
+        .expect("the chat wire should declare tools")
+        .clone();
+    let names = tools
+        .iter()
+        .filter_map(|tool| tool["function"]["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        names.contains(&FLAT_TOOL_NAME),
+        "the MCP tool must be exposed by its flat name on the chat wire, got {names:?}"
+    );
+    assert!(
+        tools.iter().all(|tool| tool["type"] == "function"),
+        "the chat wire must not declare namespace or tool-search tools, got {tools:?}"
+    );
+    assert!(
+        !names.contains(&"tool_search"),
+        "tool search has no Chat Completions representation, got {names:?}"
+    );
+
+    // The flat name the model saw has to route back to the namespaced handler,
+    // and the MCP result has to survive the text-only Chat Completions wire.
+    let follow_up = bodies
+        .iter()
+        .find(|body| {
+            body["messages"]
+                .as_array()
+                .is_some_and(|messages| messages.iter().any(|message| message["role"] == "tool"))
+        })
+        .expect("the MCP result should be reported back to the model");
+    let messages = follow_up["messages"]
+        .as_array()
+        .expect("chat messages should be an array");
+    let tool_contents = messages
+        .iter()
+        .filter(|message| message["role"] == "tool")
+        .map(|message| message["content"].to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|message| message["role"] == "assistant")
+            .flat_map(|message| message["tool_calls"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default())
+            .filter_map(|call| call["function"]["name"].as_str().map(str::to_string))
+            .collect::<Vec<_>>(),
+        vec![FLAT_TOOL_NAME.to_string(), FLAT_TEXT_TOOL_NAME.to_string()]
+    );
+    assert!(
+        tool_contents.iter().any(|content| content.contains("ping")),
+        "the flat tool call should reach the MCP server, got {tool_contents:?}"
+    );
+    assert!(
+        tool_contents
+            .iter()
+            .any(|content| content.contains("content item fixture result")),
+        "text-only MCP content items must not reach the model as an empty result, got {tool_contents:?}"
+    );
+
+    server.verify().await;
     Ok(())
 }
