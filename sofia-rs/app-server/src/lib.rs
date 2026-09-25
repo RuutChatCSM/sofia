@@ -1375,9 +1375,14 @@ fn loader_overrides_with_app_config_file(
     path: Option<std::path::PathBuf>,
 ) -> IoResult<LoaderOverrides> {
     if let Some(path) = path {
-        overrides.user_config_path = Some(AbsolutePathBuf::from_absolute_path_checked(path).map_err(|err| {
-            std::io::Error::new(ErrorKind::InvalidInput, format!("invalid SOFIA_APP_CONFIG_FILE: {err}"))
-        })?);
+        overrides.user_config_path = Some(
+            AbsolutePathBuf::from_absolute_path_checked(path).map_err(|err| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("invalid SOFIA_APP_CONFIG_FILE: {err}"),
+                )
+            })?,
+        );
     }
     Ok(overrides)
 }
@@ -1441,13 +1446,20 @@ mod tests {
     #[test]
     fn embedding_app_config_is_absolute_and_preserves_home_independence() {
         let path = std::env::temp_dir().join("sofia-workspace-config.toml");
-        let overrides = loader_overrides_with_app_config_file(
-            LoaderOverrides::default(), Some(path.clone()),
-        ).expect("absolute app config");
-        assert_eq!(overrides.user_config_path, Some(AbsolutePathBuf::from_absolute_path(path).unwrap()));
-        assert!(loader_overrides_with_app_config_file(
-            LoaderOverrides::default(), Some(std::path::PathBuf::from("relative.toml")),
-        ).is_err());
+        let overrides =
+            loader_overrides_with_app_config_file(LoaderOverrides::default(), Some(path.clone()))
+                .expect("absolute app config");
+        assert_eq!(
+            overrides.user_config_path,
+            Some(AbsolutePathBuf::from_absolute_path(path).unwrap())
+        );
+        assert!(
+            loader_overrides_with_app_config_file(
+                LoaderOverrides::default(),
+                Some(std::path::PathBuf::from("relative.toml")),
+            )
+            .is_err()
+        );
     }
 
     #[test]

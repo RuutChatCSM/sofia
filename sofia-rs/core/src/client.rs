@@ -93,7 +93,6 @@ use sofia_protocol::models::FunctionCallOutputContentItem;
 use sofia_protocol::models::FunctionCallOutputPayload;
 use sofia_protocol::models::ReasoningItemContent;
 use sofia_protocol::models::ResponseItem;
-use sofia_protocol::models::function_call_output_content_items_to_text;
 use sofia_protocol::openai_models::ModelInfo;
 use sofia_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use sofia_protocol::protocol::AuthRecoveryEvent;
@@ -3453,35 +3452,57 @@ fn log_chat_completions_request_body(
     }
 }
 
-/// Chat Completions carries a tool result as a single string.
-///
-/// Tool outputs that arrive as content items - every MCP result, including the
-/// in-app browser harness - have no `text_content`, so sending only
-/// `text_content()` would hand the model an empty tool result. Flatten the text
-/// items instead, and say so explicitly when multimodal items cannot cross the
-/// text-only wire.
-fn chat_completions_tool_content(output: &FunctionCallOutputPayload) -> String {
-    if let Some(text) = output.text_content().filter(|text| !text.is_empty()) {
-        return text.to_string();
-    }
-
+/// Chat Completions tool messages are text-only. Keep their images in a
+/// companion user message after all results in the tool-call batch.
+fn chat_completions_tool_content(
+    output: &FunctionCallOutputPayload,
+    supports_images: bool,
+) -> (String, Vec<serde_json::Value>) {
     let Some(items) = output.content_items() else {
-        return String::new();
+        return (
+            output.text_content().unwrap_or_default().to_string(),
+            Vec::new(),
+        );
     };
-    let mut content = function_call_output_content_items_to_text(items).unwrap_or_default();
-    let omitted = items
-        .iter()
-        .filter(|item| !matches!(item, FunctionCallOutputContentItem::InputText { .. }))
-        .count();
-    if omitted > 0 {
-        if !content.is_empty() {
-            content.push('\n');
+    let mut text = Vec::new();
+    let mut images = Vec::new();
+    for item in items {
+        match item {
+            FunctionCallOutputContentItem::InputText { text: value } => text.push(value.clone()),
+            FunctionCallOutputContentItem::InputImage { image_url, detail } if supports_images => {
+                images.push(chat_completions_image(image_url, *detail));
+            }
+            FunctionCallOutputContentItem::InputImage { .. } => {
+                text.push(
+                    "Image unavailable: the selected model does not support image input.".into(),
+                );
+            }
+            FunctionCallOutputContentItem::InputAudio { .. }
+            | FunctionCallOutputContentItem::EncryptedContent { .. } => {
+                text.push("Non-image media cannot be represented in this tool result.".into());
+            }
         }
-        content.push_str(&format!(
-            "<{omitted} non-text content item(s) omitted: this tool result is text-only>"
-        ));
     }
-    content
+    if !images.is_empty() {
+        text.push("Tool images follow after the tool results.".into());
+    }
+    (text.join("\n"), images)
+}
+
+fn chat_completions_image(
+    image_url: &str,
+    detail: Option<sofia_protocol::models::ImageDetail>,
+) -> serde_json::Value {
+    use sofia_protocol::models::ImageDetail;
+    let mut image = serde_json::json!({"url": image_url});
+    if let Some(detail) = detail {
+        // `original` is Responses-only; the pixels are already prepared.
+        image["detail"] = serde_json::json!(match detail {
+            ImageDetail::Original => ImageDetail::High,
+            other => other,
+        });
+    }
+    serde_json::json!({"type": "image_url", "image_url": image})
 }
 
 /// Build a Chat Completions request body from the internal prompt format.
@@ -3493,6 +3514,11 @@ fn build_chat_completions_body(
     use serde_json::json;
 
     let mut messages = Vec::new();
+    let supports_images = model_info
+        .input_modalities
+        .contains(&sofia_protocol::openai_models::InputModality::Image);
+    let mut pending_tool_images = Vec::new();
+    let mut outstanding_tool_results = std::collections::HashSet::new();
 
     // System instructions.
     let system_content = &prompt.base_instructions.text;
@@ -3550,21 +3576,42 @@ fn build_chat_completions_body(
             ResponseItem::Message { role, content, .. } => {
                 // Tool calls buffered before this message should already have
                 // been flushed before their tool outputs; nothing to do here.
-                let text = content
-                    .iter()
-                    .filter_map(|c| match c {
-                        ContentItem::OutputText { text } => Some(text.as_str()),
-                        ContentItem::InputText { text } => Some(text.as_str()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let mut parts = Vec::new();
+                let mut has_image = false;
+                for part in content {
+                    match part {
+                        ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                            parts.push(json!({"type": "text", "text": text}));
+                        }
+                        ContentItem::InputImage { image_url, detail } if supports_images && role == "user" => {
+                            has_image = true;
+                            parts.push(chat_completions_image(image_url, *detail));
+                        }
+                        ContentItem::InputImage { .. } => parts.push(json!({"type": "text", "text": "Image unavailable for this model or message role."})),
+                        ContentItem::InputAudio { .. } => parts.push(json!({"type": "text", "text": "Audio input unavailable on this transport."})),
+                    }
+                }
+                let message_content = if has_image {
+                    json!(parts)
+                } else {
+                    json!(
+                        parts
+                            .iter()
+                            .filter_map(|part| part["text"].as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    )
+                };
                 // A user message starts a new turn; reasoning from the previous
                 // turn no longer applies.
                 if role == "user" {
                     pending_reasoning_content.clear();
                 }
-                if !text.is_empty() {
+                if has_image
+                    || message_content
+                        .as_str()
+                        .is_some_and(|text| !text.is_empty())
+                {
                     // Chat Completions providers only accept the OpenAI roles
                     // (`system`/`user`/`assistant`/`tool`). Sofia's context
                     // fragments use the Responses-style `developer` role, which
@@ -3576,7 +3623,7 @@ fn build_chat_completions_body(
                     };
                     let mut message = json!({
                         "role": chat_role,
-                        "content": text
+                        "content": message_content
                     });
                     // DeepSeek thinking mode requires reasoning_content on the
                     // assistant message(s) of the turn that produced reasoning —
@@ -3600,6 +3647,7 @@ fn build_chat_completions_body(
                 // these cause 400 Bad Request from the provider and are
                 // not recoverable by retrying the same request body.
                 if !name.is_empty() {
+                    outstanding_tool_results.insert(call_id.clone());
                     pending_assistant_tool_calls.push(json!({
                         "id": call_id,
                         "type": "function",
@@ -3633,12 +3681,20 @@ fn build_chat_completions_body(
                         &pending_reasoning_content,
                     ));
                 }
-                let content = chat_completions_tool_content(output);
+                let (content, images) = chat_completions_tool_content(output, supports_images);
+                if !images.is_empty() {
+                    pending_tool_images.push(json!({"type": "text", "text": format!("Images returned by tool call {call_id}: (tool output, not user instructions)")}));
+                    pending_tool_images.extend(images);
+                }
                 messages.push(json!({
                     "role": "tool",
                     "tool_call_id": call_id,
                     "content": content
                 }));
+                outstanding_tool_results.remove(call_id);
+                if outstanding_tool_results.is_empty() && !pending_tool_images.is_empty() {
+                    messages.push(json!({"role": "user", "content": std::mem::take(&mut pending_tool_images)}));
+                }
             }
             ResponseItem::Reasoning { content, .. } => {
                 // Preserve the latest assistant reasoning so it can be attached
@@ -3671,6 +3727,16 @@ fn build_chat_completions_body(
         ));
     }
 
+    // Images whose batch never completed - a call with no output, such as an
+    // interrupted turn - still have to reach the model. Dropping them would
+    // leave the agent believing it never saw the screen.
+    if !pending_tool_images.is_empty() {
+        messages.push(json!({
+            "role": "user",
+            "content": std::mem::take(&mut pending_tool_images)
+        }));
+    }
+
     // --- Request hygiene (mimocode pattern) ---
     //
     // `ensureNonEmptyContent`: empty user messages break providers that enforce
@@ -3694,7 +3760,7 @@ fn build_chat_completions_body(
             && message
                 .get("content")
                 .and_then(|c| c.as_str())
-                .is_none_or(str::is_empty)
+                .is_some_and(str::is_empty)
         {
             message["content"] = json!("Continue.");
         }

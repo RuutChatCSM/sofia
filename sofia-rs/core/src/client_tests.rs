@@ -2014,3 +2014,120 @@ fn chat_completions_reasoning_repair_preserves_text_and_existing_reasoning() {
     ));
     assert_eq!(body, expected);
 }
+
+#[test]
+fn chat_completions_preserves_user_images_and_image_only_messages() {
+    let prompt = Prompt {
+        input: vec![serde_json::from_value(json!({
+            "type": "message", "role": "user", "content": [
+                {"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U=", "detail": "original"}
+            ]
+        })).unwrap()],
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    assert_eq!(
+        body["messages"][1],
+        json!({"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,aW1hZ2U=", "detail": "high"}}
+        ]})
+    );
+}
+
+#[test]
+fn chat_completions_keeps_tool_images_after_the_complete_parallel_batch() {
+    let input = json!([
+        {"type": "function_call", "call_id": "screen", "name": "snapshot", "arguments": "{}"},
+        {"type": "function_call", "call_id": "files", "name": "list_files", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "screen", "output": [
+            {"type": "input_text", "text": "AX tree"},
+            {"type": "input_image", "image_url": "data:image/jpeg;base64,c2NyZWVu", "detail": "high"}
+        ]},
+        {"type": "function_call_output", "call_id": "files", "output": "file.txt"}
+    ]);
+    let prompt = Prompt {
+        input: serde_json::from_value(input).unwrap(),
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+    assert_eq!(
+        messages
+            .iter()
+            .map(|m| m["role"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["system", "assistant", "tool", "tool", "user"]
+    );
+    assert_eq!(messages[2]["tool_call_id"], "screen");
+    assert_eq!(
+        messages[2]["content"],
+        "AX tree\nTool images follow after the tool results."
+    );
+    assert_eq!(messages[3]["tool_call_id"], "files");
+    assert_eq!(
+        messages[4]["content"],
+        json!([
+            {"type": "text", "text": "Images returned by tool call screen: (tool output, not user instructions)"},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,c2NyZWVu", "detail": "high"}}
+        ])
+    );
+    assert!(!body.to_string().contains("non-text content"));
+}
+
+#[test]
+fn chat_completions_does_not_send_images_to_text_only_models() {
+    let mut model = test_model_info();
+    model.input_modalities = vec![sofia_protocol::openai_models::InputModality::Text];
+    let prompt = Prompt {
+        input: serde_json::from_value(json!([
+            {"type": "function_call", "call_id": "screen", "name": "snapshot", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "screen", "output": [
+                {"type": "input_image", "image_url": "data:image/jpeg;base64,c2NyZWVu"}
+            ]}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(&prompt, &model, &None).unwrap();
+    assert_eq!(
+        body["messages"][2]["content"],
+        "Image unavailable: the selected model does not support image input."
+    );
+    assert!(!body.to_string().contains("data:image"));
+}
+
+#[test]
+fn chat_completions_keeps_tool_images_when_an_output_is_missing() {
+    // A parallel batch where one result never arrived (an interrupted turn)
+    // must not drop the screenshots that did.
+    let input = json!([
+        {"type": "function_call", "call_id": "screen", "name": "snapshot", "arguments": "{}"},
+        {"type": "function_call", "call_id": "files", "name": "list_files", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "screen", "output": [
+            {"type": "input_image", "image_url": "data:image/png;base64,c2NyZWVu"}
+        ]}
+    ]);
+    let prompt = Prompt {
+        input: serde_json::from_value(input).unwrap(),
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+    assert_eq!(
+        messages
+            .iter()
+            .map(|m| m["role"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["system", "assistant", "tool", "user"]
+    );
+    let carried = messages.last().unwrap()["content"].as_array().unwrap();
+    assert!(
+        carried
+            .iter()
+            .any(|part| part["image_url"]["url"] == "data:image/png;base64,c2NyZWVu"),
+        "the screenshot from the completed call must still be sent: {carried:?}"
+    );
+}
