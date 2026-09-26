@@ -3,8 +3,6 @@ use crate::common::ResponseStream;
 use crate::common::SafetyBuffering;
 use crate::common::SafetyBufferingTreatment;
 use crate::error::ApiError;
-use crate::rate_limits::parse_all_rate_limits;
-use crate::safety_buffering::treatment_from_headers;
 use crate::telemetry::SseTelemetry;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
@@ -27,11 +25,11 @@ use tokio::time::timeout;
 use tracing::debug;
 use tracing::trace;
 
-const X_REASONING_INCLUDED_HEADER: &str = "x-reasoning-included";
-const X_CODEX_TURN_STATE_HEADER: &str = "x-sofia-turn-state";
-const OPENAI_MODEL_HEADER: &str = "openai-model";
-const REQUEST_ID_HEADER: &str = "x-request-id";
+use crate::sse::header_events::X_CODEX_TURN_STATE_HEADER;
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
+
+/// Event channel capacity for Responses streams.
+const RESPONSE_EVENT_CHANNEL_CAPACITY: usize = 1600;
 
 pub fn spawn_response_stream(
     stream_response: StreamResponse,
@@ -39,66 +37,23 @@ pub fn spawn_response_stream(
     telemetry: Option<Arc<dyn SseTelemetry>>,
     turn_state: Option<Arc<OnceLock<String>>>,
 ) -> ResponseStream {
-    let rate_limit_snapshots = parse_all_rate_limits(&stream_response.headers);
-    let models_etag = stream_response
-        .headers
-        .get("X-Models-Etag")
-        .and_then(|v| v.to_str().ok())
-        .map(ToString::to_string);
-    let server_model = stream_response
-        .headers
-        .get(OPENAI_MODEL_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .map(ToString::to_string);
-    let reasoning_included = stream_response
-        .headers
-        .get(X_REASONING_INCLUDED_HEADER)
-        .is_some();
-    let upstream_request_id = stream_response
-        .headers
-        .get(REQUEST_ID_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
-    let safety_buffering_treatment =
-        treatment_from_headers(&stream_response.headers).unwrap_or_default();
-    if let Some(turn_state) = turn_state.as_ref()
-        && let Some(header_value) = stream_response
-            .headers
-            .get(X_CODEX_TURN_STATE_HEADER)
-            .and_then(|value| value.to_str().ok())
-    {
-        let _ = turn_state.set(header_value.to_string());
-    }
-    let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
-    tokio::spawn(async move {
-        if let Some(model) = server_model {
-            let _ = tx_event.send(Ok(ResponseEvent::ServerModel(model))).await;
-        }
-        for snapshot in rate_limit_snapshots {
-            let _ = tx_event.send(Ok(ResponseEvent::RateLimits(snapshot))).await;
-        }
-        if let Some(etag) = models_etag {
-            let _ = tx_event.send(Ok(ResponseEvent::ModelsEtag(etag))).await;
-        }
-        if reasoning_included {
-            let _ = tx_event
-                .send(Ok(ResponseEvent::ServerReasoningIncluded(true)))
-                .await;
-        }
-        process_sse_with_treatment(
-            stream_response.bytes,
-            tx_event,
-            idle_timeout,
-            telemetry,
-            safety_buffering_treatment,
-        )
-        .await;
-    });
-
-    ResponseStream {
-        rx_event,
-        upstream_request_id,
-    }
+    crate::sse::header_events::spawn_wire_stream(
+        stream_response,
+        idle_timeout,
+        telemetry,
+        turn_state,
+        RESPONSE_EVENT_CHANNEL_CAPACITY,
+        |bytes, tx_event, idle_timeout, telemetry, safety_buffering_treatment| async move {
+            process_sse_with_treatment(
+                bytes,
+                tx_event,
+                idle_timeout,
+                telemetry,
+                safety_buffering_treatment,
+            )
+            .await;
+        },
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -750,6 +705,8 @@ fn rate_limit_regex() -> &'static regex_lite::Regex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sse::header_events::OPENAI_MODEL_HEADER;
+    use crate::sse::header_events::REQUEST_ID_HEADER;
     use assert_matches::assert_matches;
     use bytes::Bytes;
     use futures::TryStreamExt;

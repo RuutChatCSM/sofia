@@ -28,6 +28,8 @@ pub use crate::auth::AuthProviderFuture;
 pub use crate::auth::SharedAuthProvider;
 pub use crate::auth::auth_header_telemetry;
 pub use crate::common::AccessPrograms;
+pub use crate::endpoint::CHAT_COMPLETIONS_PATH;
+pub use crate::endpoint::ChatCompletionsClient;
 pub use crate::common::CompactionInput;
 pub use crate::common::MemorySummarizeInput;
 pub use crate::common::MemorySummarizeOutput;

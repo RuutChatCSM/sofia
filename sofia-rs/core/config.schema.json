@@ -672,12 +672,6 @@
             "code_mode_prewarm": {
               "type": "boolean"
             },
-            "sofia_git_commit": {
-              "type": "boolean"
-            },
-            "sofia_hooks": {
-              "type": "boolean"
-            },
             "collab": {
               "type": "boolean"
             },
@@ -962,6 +956,12 @@
             },
             "sleep_tool": {
               "$ref": "#/definitions/FeatureToml_for_SleepToolConfigToml"
+            },
+            "sofia_git_commit": {
+              "type": "boolean"
+            },
+            "sofia_hooks": {
+              "type": "boolean"
             },
             "sqlite": {
               "type": "boolean"
@@ -6074,12 +6074,6 @@
         "code_mode_prewarm": {
           "type": "boolean"
         },
-        "sofia_git_commit": {
-          "type": "boolean"
-        },
-        "sofia_hooks": {
-          "type": "boolean"
-        },
         "collab": {
           "type": "boolean"
         },
@@ -6364,6 +6358,12 @@
         },
         "sleep_tool": {
           "$ref": "#/definitions/FeatureToml_for_SleepToolConfigToml"
+        },
+        "sofia_git_commit": {
+          "type": "boolean"
+        },
+        "sofia_hooks": {
+          "type": "boolean"
         },
         "sqlite": {
           "type": "boolean"

@@ -34,6 +34,8 @@ use async_channel::Sender;
 use sofia_api::AgentIdentityTelemetry;
 use sofia_api::ApiError;
 use sofia_api::AuthProvider;
+use sofia_api::CHAT_COMPLETIONS_PATH as CHAT_COMPLETIONS_ENDPOINT;
+use sofia_api::ChatCompletionsClient as ApiChatCompletionsClient;
 use sofia_api::CompactClient as ApiCompactClient;
 use sofia_api::CompactionInput as ApiCompactionInput;
 use sofia_api::Compression;
@@ -137,7 +139,6 @@ use crate::responses_metadata::subagent_header_value;
 use crate::util::emit_feedback_auth_recovery_tags;
 use sofia_feedback::FeedbackRequestTags;
 use sofia_feedback::emit_feedback_request_tags_with_auth_env;
-use sofia_http_client::HttpTransport;
 use sofia_login::auth::AgentIdentityAuthPolicy;
 use sofia_login::auth_env_telemetry::AuthEnvTelemetry;
 use sofia_login::auth_env_telemetry::collect_auth_env_telemetry;
@@ -151,9 +152,7 @@ use sofia_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
 use sofia_model_provider_info::ModelProviderInfo;
 use sofia_model_provider_info::WireApi;
 use sofia_protocol::error::CodexErr;
-use sofia_protocol::error::CodexErrorDetails;
 use sofia_protocol::error::Result;
-use sofia_protocol::error::UnexpectedResponseError;
 use sofia_response_debug_context::extract_response_debug_context;
 use sofia_response_debug_context::extract_response_debug_context_from_api_error;
 use sofia_response_debug_context::telemetry_api_error_message;
@@ -178,7 +177,6 @@ const RESPONSES_WEBSOCKETS_V2_BETA_HEADER_VALUE: &str = "responses_websockets=20
 const X_OPENAI_INTERNAL_CODEX_RESPONSES_LITE_HEADER: &str =
     "x-openai-internal-sofia-responses-lite";
 const REALTIME_CALLS_ENDPOINT: &str = "/realtime/calls";
-const CHAT_COMPLETIONS_ENDPOINT: &str = "/chat/completions";
 const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
 // `/responses/compact` is unary, so the timeout covers the full response rather than one idle
 // period between stream events.
@@ -205,6 +203,44 @@ fn session_telemetry_for_request(
             .as_ref()
             .and_then(|reasoning| reasoning.effort.as_ref()),
     )
+}
+
+/// Recover the HTTP status carried by an [`ApiError`], if any.
+///
+/// `ReqwestTransport` surfaces every non-2xx response as
+/// `TransportError::Http`, so status-based recovery decisions read it back out.
+fn status_of_api_error(err: &ApiError) -> Option<http::StatusCode> {
+    match err {
+        ApiError::Transport(sofia_http_client::TransportError::Http { status, .. }) => Some(*status),
+        ApiError::Api { status, .. } => Some(*status),
+        _ => None,
+    }
+}
+
+/// Best-effort extraction of an error response body for diagnostics.
+fn api_error_body(err: &ApiError) -> String {
+    match err {
+        ApiError::Transport(sofia_http_client::TransportError::Http { body, .. }) => {
+            body.clone().unwrap_or_default()
+        }
+        ApiError::Api { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Chat Completions counterpart of [`session_telemetry_for_request`].
+///
+/// The chat body carries `service_tier` and `reasoning_effort` as top-level
+/// scalars rather than a `reasoning` object, so the inference request is
+/// stamped from those fields to keep telemetry identical across wire APIs.
+fn session_telemetry_for_chat_request(
+    session_telemetry: &SessionTelemetry,
+    service_tier: Option<&str>,
+    effort: Option<&ReasoningEffortConfig>,
+) -> SessionTelemetry {
+    session_telemetry
+        .clone()
+        .with_inference_request(service_tier, effort)
 }
 
 /// Session-scoped state shared by all [`ModelClient`] clones.
@@ -2142,12 +2178,12 @@ impl ModelClientSession {
         &self,
         prompt: &Prompt,
         model_info: &ModelInfo,
-        _session_telemetry: &SessionTelemetry,
+        session_telemetry: &SessionTelemetry,
         effort: Option<ReasoningEffortConfig>,
         _summary: ReasoningSummaryConfig,
-        _service_tier: Option<String>,
-        _responses_metadata: &CodexResponsesMetadata,
-        _inference_trace: &InferenceTraceContext,
+        service_tier: Option<String>,
+        responses_metadata: &CodexResponsesMetadata,
+        inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
         info!(
             model = %model_info.slug,
@@ -2160,7 +2196,14 @@ impl ModelClientSession {
         // Build the Chat Completions request body from the internal prompt format.
         // Mutable so the 400 recovery path can echo `reasoning_content` back
         // onto the assistant tool-call messages and retry the same request.
-        let mut request_body = build_chat_completions_body(prompt, model_info, &effort)?;
+        let prompt_cache_key = self.client.prompt_cache_key(responses_metadata);
+        let mut request_body = build_chat_completions_body(
+            prompt,
+            model_info,
+            &effort,
+            service_tier.as_deref(),
+            Some(&prompt_cache_key),
+        )?;
         debug!(
             body_size = serde_json::to_string(&request_body)
                 .map(|s| s.len())
@@ -2168,514 +2211,154 @@ impl ModelClientSession {
             "stream_chat_completions_api: request body built"
         );
 
-        // Retry loop — retry on transient transport/HTTP errors (network failures,
-        // 429 rate-limited, 500/502/503 server errors) with exponential backoff.
-        let max_retries = 3u32;
-        let mut last_error: Option<CodexErr> = None;
+        // Mirrors the Responses transport loop: auth recovery on 401, provider
+        // error mapping, request + SSE telemetry, and inference tracing all run
+        // through the same shared machinery, so a provider switched between wire
+        // APIs behaves identically.
+        let auth_manager = self.client.state.provider().auth_manager();
+        let mut auth_recovery = auth_manager
+            .as_ref()
+            .map(AuthManager::unauthorized_recovery);
+        let mut provider_auth_recovery_attempted = false;
+        let mut pending_retry = PendingUnauthorizedRetry::default();
         // Guards the one-shot `reasoning_content` repair below so a provider that
         // keeps rejecting the request cannot loop.
         let mut reasoning_content_recovery_used = false;
-        let stream_response = 'retry: {
-            for attempt in 0..=max_retries {
-                if attempt > 0 {
-                    info!(
-                        attempt,
-                        max_retries, "stream_chat_completions_api: retrying after previous failure"
-                    );
-                }
-                let client_setup = self.client.current_client_setup().await?;
-                let transport = self
-                    .client
-                    .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?;
+        loop {
+            let client_setup = self.client.current_client_setup().await?;
+            let transport = self.client.build_api_transport(
+                &client_setup.api_provider,
+                CHAT_COMPLETIONS_ENDPOINT,
+            )?;
 
-                // Build the HTTP request.
-                let mut request = client_setup
-                    .api_provider
-                    .build_request(http::Method::POST, CHAT_COMPLETIONS_ENDPOINT);
-                client_setup.api_auth.add_auth_headers(&mut request.headers);
-                request.body = Some(sofia_http_client::RequestBody::Json(request_body.clone()));
-
-                debug!(attempt, "stream_chat_completions_api: sending request");
-                match transport.stream(request).await {
-                    Ok(resp) if resp.status.is_success() => {
-                        info!(status = %resp.status, attempt, "stream_chat_completions_api: streaming started");
-                        break 'retry resp;
-                    }
-                    Ok(resp) => {
-                        // HTTP error — read the body and decide if retryable.
-                        let status = resp.status;
-                        let mut body = Vec::new();
-                        {
-                            use futures::StreamExt;
-                            let mut byte_stream = resp.bytes;
-                            while let Some(chunk) = byte_stream.next().await {
-                                if let Ok(bytes) = chunk {
-                                    body.extend_from_slice(&bytes);
-                                }
-                            }
-                        }
-                        let body_str = String::from_utf8_lossy(&body).to_string();
-                        let retryable = status.is_server_error()
-                            || status == http::StatusCode::TOO_MANY_REQUESTS
-                            || status == http::StatusCode::REQUEST_TIMEOUT;
-                        // Log the request body for request-shape failures so
-                        // provider incompatibilities are diagnosable.
-                        if log_chat_completions_request_body_for(status) {
-                            log_chat_completions_request_body(status, &body_str, &request_body);
-                        } else {
-                            warn!(
-                                status = %status,
-                                attempt,
-                                retryable,
-                                body_len = body_str.len(),
-                                "stream_chat_completions_api: HTTP error"
-                            );
-                        }
-                        if retryable && attempt < max_retries {
-                            let delay_ms = 500 * 2u64.pow(attempt);
-                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            last_error = Some(CodexErr::from(CodexErrorDetails::UnexpectedStatus(
-                                UnexpectedResponseError {
-                                    status,
-                                    body: body_str,
-                                    user_message: None,
-                                    url: None,
-                                    cf_ray: None,
-                                    request_id: None,
-                                    identity_error_code: None,
-                                    identity_authorization_error: None,
-                                },
-                            )));
-                            continue;
-                        }
-                        return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(format!(
-                            "chat completions {status} (non-retryable): {}",
-                            body_str.chars().take(500).collect::<String>()
-                        ))));
-                    }
-                    Err(e) => {
-                        // `ReqwestTransport` reports every non-2xx response as a
-                        // `TransportError::Http`, so provider HTTP errors (400,
-                        // 401, 404, 5xx, ...) arrive here rather than in the
-                        // `Ok(resp)` arm above. Recover the status and body so
-                        // the request is classified and logged by HTTP
-                        // semantics instead of as an opaque transport failure.
-                        warn!(
-                            error = %e,
-                            attempt,
-                            retryable = e.is_retryable(),
-                            "stream_chat_completions_api: transport error"
-                        );
-                        let http_error = match &e {
-                            sofia_http_client::TransportError::Http { status, body, .. } => {
-                                Some((*status, body.clone().unwrap_or_default()))
-                            }
-                            _ => None,
-                        };
-                        if let Some((status, body_str)) = http_error {
-                            if log_chat_completions_request_body_for(status) {
-                                log_chat_completions_request_body(status, &body_str, &request_body);
-                            }
-                            // Recovery: thinking-mode providers reject a request
-                            // whose assistant tool-call message omits
-                            // `reasoning_content`. Echo it back and retry once
-                            // instead of failing the whole turn.
-                            if status == http::StatusCode::BAD_REQUEST
-                                && !reasoning_content_recovery_used
-                                && body_str.contains("reasoning_content")
-                                && repair_chat_completions_reasoning_content(&mut request_body)
-                            {
-                                reasoning_content_recovery_used = true;
-                                warn!(
-                                    attempt,
-                                    "stream_chat_completions_api: retrying with reasoning_content echoed back"
-                                );
-                                continue;
-                            }
-                            if !e.is_retryable() {
-                                return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(
-                                    format!(
-                                        "chat completions {status} (non-retryable): {}",
-                                        body_str.chars().take(500).collect::<String>()
-                                    ),
-                                )));
-                            }
-                        } else if !e.is_retryable() {
-                            return Err(CodexErr::from(CodexErrorDetails::InvalidRequest(
-                                format!("chat completions transport error (non-retryable): {e}"),
-                            )));
-                        }
-                        if attempt < max_retries {
-                            let delay_ms = 500 * 2u64.pow(attempt);
-                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            last_error = Some(CodexErr::from(CodexErrorDetails::Stream(format!(
-                                "chat completions request failed (attempt {}): {e}",
-                                attempt + 1
-                            ))));
-                            continue;
-                        }
-                        return Err(CodexErr::from(CodexErrorDetails::Stream(format!(
-                            "chat completions request failed after {max_retries} retries: {e}"
-                        ))));
-                    }
-                }
-            }
-            warn!(
-                max_retries,
-                "stream_chat_completions_api: all retries exhausted"
+            let request_auth_context = AuthRequestTelemetryContext::new(
+                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.api_auth.as_ref(),
+                client_setup.agent_identity_telemetry.clone(),
+                pending_retry,
             );
-            return Err(last_error.unwrap_or_else(|| {
-                CodexErr::from(CodexErrorDetails::Stream(
-                    "chat completions request failed".to_string(),
-                ))
-            }));
-        };
+            let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
+                session_telemetry,
+                request_auth_context,
+                RequestRouteTelemetry::for_endpoint(CHAT_COMPLETIONS_ENDPOINT),
+                self.client.state.auth_env_telemetry.clone(),
+            );
+            let request_session_telemetry = session_telemetry_for_chat_request(
+                session_telemetry,
+                request_body.get("service_tier").and_then(|v| v.as_str()),
+                effort.as_ref(),
+            );
+            let inference_trace_attempt = inference_trace.start_attempt();
 
-        // Parse the SSE response stream into ResponseEvents.
-        let inference_attempt = _inference_trace.start_attempt();
-        let (tx, rx) = tokio::sync::mpsc::channel(64);
-        let response_id = format!("chatcmpl-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+            let client = ApiChatCompletionsClient::new(
+                transport,
+                client_setup.api_provider,
+                client_setup.api_auth,
+            )
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
 
-        tokio::spawn(async move {
-            use sofia_api::ResponseEvent;
-
-            let mut byte_stream = stream_response.bytes;
-            let mut line_buf = Vec::new();
-            let mut text_content = String::new();
-            let text_item_id = ResponseItemId::new(&format!("{response_id}_msg"));
-            let mut text_started = false;
-            let mut reasoning_started = false;
-            let mut reasoning_item_id: Option<ResponseItemId> = None;
-            let mut reasoning_text = String::new();
-            let mut finish_reason: Option<String> = None;
-            let mut token_usage: Option<sofia_protocol::protocol::TokenUsage> = None;
-            // BTreeMap preserves tool call index ordering (HashMap is non-deterministic).
-            let mut tool_call_buffers: std::collections::BTreeMap<u64, (String, String, String)> =
-                std::collections::BTreeMap::new();
-
-            info!(response_id = %response_id, "stream_chat_completions_api: SSE parse task started");
-            let _ = tx
-                .send(Ok(ResponseEvent::Created { response_id: None }))
+            let stream_result = client
+                .stream(
+                    request_body.clone(),
+                    ApiHeaderMap::new(),
+                    Compression::None,
+                    None,
+                )
                 .await;
 
-            let mut chunk_count: u64 = 0;
-            let mut text_delta_count: u64 = 0;
-            let mut reasoning_delta_count: u64 = 0;
-            let mut tool_call_index_count: u64 = 0;
-
-            // Read chunks from the SSE stream incrementally, split into lines,
-            // and process each complete line immediately.
-            let mut stream_ended = false;
-            while let Some(chunk_result) = byte_stream.next().await {
-                let chunk = match chunk_result {
-                    Ok(c) => c,
-                    Err(_) => break,
-                };
-                chunk_count += 1;
-                line_buf.extend_from_slice(&chunk);
-
-                // Process all complete \n-terminated lines in the buffer.
-                while let Some(newline_pos) = line_buf.iter().position(|&b| b == b'\n') {
-                    let line_bytes: Vec<u8> = line_buf.drain(..=newline_pos).collect();
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    let line = line.trim();
-
-                    if line.is_empty() || line.starts_with(':') {
-                        continue;
-                    }
-
-                    let Some(data) = line.strip_prefix("data: ") else {
-                        continue;
-                    };
-                    if data == "[DONE]" {
-                        info!(
-                            response_id = %response_id,
-                            chunk_count,
-                            text_delta_count,
-                            reasoning_delta_count,
-                            tool_call_index_count,
-                            "stream_chat_completions_api: [DONE] received"
+            let stream_response = match stream_result {
+                Ok(stream) => stream,
+                Err(err) => {
+                    // Recovery: thinking-mode providers reject a request whose
+                    // assistant tool-call message omits `reasoning_content`. Echo
+                    // it back and retry once instead of failing the whole turn.
+                    if status_of_api_error(&err) == Some(http::StatusCode::BAD_REQUEST)
+                        && !reasoning_content_recovery_used
+                        && repair_chat_completions_reasoning_content(&mut request_body)
+                    {
+                        reasoning_content_recovery_used = true;
+                        warn!(
+                            "stream_chat_completions_api: retrying with reasoning_content echoed back"
                         );
-                        stream_ended = true;
-                        break;
+                        continue;
                     }
-
-                    let parsed: serde_json::Value = match serde_json::from_str(data) {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
-
-                    if let Some(choices) = parsed.get("choices").and_then(|c| c.as_array()) {
-                        for choice in choices {
-                            if let Some(delta) = choice.get("delta") {
-                                // Text content.
-                                if let Some(text) = delta.get("content").and_then(|c| c.as_str())
-                                    && !text.is_empty()
-                                {
-                                    if !text_started {
-                                        text_started = true;
-                                        let _ = tx
-                                            .send(Ok(ResponseEvent::OutputItemAdded(
-                                                ResponseItem::Message {
-                                                    id: Some(text_item_id.clone()),
-                                                    role: "assistant".to_string(),
-                                                    content: Vec::new(),
-                                                    phase: None,
-                                                    internal_chat_message_metadata_passthrough:
-                                                        None,
-                                                },
-                                            )))
-                                            .await;
-                                    }
-                                    text_content.push_str(text);
-                                    text_delta_count += 1;
-                                    let _ = tx
-                                        .send(Ok(ResponseEvent::OutputTextDelta(text.to_string())))
-                                        .await;
-                                }
-                                // Reasoning content.
-                                if let Some(reasoning) = delta
-                                    .get("reasoning_content")
-                                    .or_else(|| delta.get("reasoning"))
-                                    .and_then(|r| r.as_str())
-                                {
-                                    // Even an empty field declares thinking mode. Keep
-                                    // a reasoning item so later tool requests echo it.
-                                    if !reasoning_started {
-                                        reasoning_started = true;
-                                        let rid = ResponseItemId::new("reasoning");
-                                        reasoning_item_id = Some(rid.clone());
-                                        let _ = tx
-                                            .send(Ok(ResponseEvent::OutputItemAdded(
-                                                ResponseItem::Reasoning {
-                                                    id: Some(rid),
-                                                    summary: vec![],
-                                                    content: Some(vec![]),
-                                                    encrypted_content: None,
-                                                    internal_chat_message_metadata_passthrough:
-                                                        None,
-                                                },
-                                            )))
-                                            .await;
-                                    }
-                                    if !reasoning.is_empty() {
-                                        reasoning_text.push_str(reasoning);
-                                        reasoning_delta_count += 1;
-                                        let _ = tx
-                                            .send(Ok(ResponseEvent::ReasoningContentDelta {
-                                                delta: reasoning.to_string(),
-                                                content_index: 0,
-                                            }))
-                                            .await;
-                                    }
-                                }
-                                // Tool call deltas — Chat Completions streams tool
-                                // arguments incrementally. We emit OutputItemAdded as
-                                // soon as the tool name arrives so the TUI shows the
-                                // tool call cell immediately, then accumulate arguments
-                                // and finalize in OutputItemDone at the end.
-                                if let Some(tool_calls) =
-                                    delta.get("tool_calls").and_then(|t| t.as_array())
-                                {
-                                    for tc in tool_calls {
-                                        let index = tc
-                                            .get("index")
-                                            .and_then(serde_json::Value::as_u64)
-                                            .unwrap_or(0);
-                                        let entry =
-                                            tool_call_buffers.entry(index).or_insert_with(|| {
-                                                (
-                                                    format!("{response_id}_tc_{index}"),
-                                                    String::new(),
-                                                    String::new(),
-                                                )
-                                            });
-                                        if let Some(name) = tc
-                                            .get("function")
-                                            .and_then(|f| f.get("name"))
-                                            .and_then(|n| n.as_str())
-                                            && !name.is_empty()
-                                            && entry.1.is_empty()
-                                        {
-                                            // First time we see the name — emit
-                                            // OutputItemAdded so the TUI shows the
-                                            // tool call cell right away.
-                                            tool_call_index_count += 1;
-                                            debug!(name = %name, index, "stream_chat_completions_api: tool call started");
-                                            entry.1 = name.to_string();
-                                            let _ = tx
-                                                    .send(Ok(ResponseEvent::OutputItemAdded(
-                                                        ResponseItem::FunctionCall {
-                                                            id: None,
-                                                            name: name.to_string(),
-                                                            namespace: None,
-                                                            arguments: String::new(),
-                                                            encrypted_function_args: None,
-                                                            call_id: entry.0.clone(),
-                                                            internal_chat_message_metadata_passthrough: None,
-                                                        },
-                                                    )))
-                                                    .await;
-                                        }
-                                        if let Some(args) = tc
-                                            .get("function")
-                                            .and_then(|f| f.get("arguments"))
-                                            .and_then(|a| a.as_str())
-                                        {
-                                            entry.2.push_str(args);
-                                        }
-                                    }
-                                }
-                            }
-                            // Track finish_reason from the response.
-                            if let Some(fr) = choice.get("finish_reason").and_then(|r| r.as_str())
-                                && !fr.is_empty()
-                            {
-                                info!(finish_reason = %fr, "stream_chat_completions_api: finish_reason received");
-                                finish_reason = Some(fr.to_string());
-                            }
+                    // A 401 is recoverable by the provider's auth manager, which
+                    // can refresh the credential and retry the same turn.
+                    if let ApiError::Transport(unauthorized_transport) = err {
+                        if !self
+                            .client
+                            .state
+                            .provider()
+                            .is_recoverable_auth_error(&unauthorized_transport)
+                        {
+                            let response_debug_context =
+                                extract_response_debug_context(&unauthorized_transport);
+                            let err = self.client.state.provider().map_api_error(
+                                ApiError::Transport(unauthorized_transport),
+                            );
+                            inference_trace_attempt.record_failed(
+                                &err,
+                                response_debug_context.request_id.as_deref(),
+                                /*output_items*/ &[],
+                            );
+                            return Err(err);
                         }
+                        let response_debug_context =
+                            extract_response_debug_context(&unauthorized_transport);
+                        inference_trace_attempt.record_failed(
+                            &unauthorized_transport,
+                            response_debug_context.request_id.as_deref(),
+                            /*output_items*/ &[],
+                        );
+                        pending_retry = PendingUnauthorizedRetry::from_recovery(
+                            handle_unauthorized(
+                                unauthorized_transport,
+                                &mut auth_recovery,
+                                &mut provider_auth_recovery_attempted,
+                                session_telemetry,
+                                &self.client.state.provider(),
+                                self.client.event_sender.as_ref(),
+                                responses_metadata.turn_id.as_deref(),
+                            )
+                            .await?,
+                        );
+                        continue;
                     }
-
-                    // Parse token usage from the final chunk (when
-                    // stream_options.include_usage is set, the last SSE
-                    // payload contains a `usage` object).
-                    if let Some(usage_obj) = parsed.get("usage").and_then(|u| u.as_object()) {
-                        let input_tokens = usage_obj
-                            .get("prompt_tokens")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or(0) as i64;
-                        let output_tokens = usage_obj
-                            .get("completion_tokens")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or(0) as i64;
-                        let total_tokens = usage_obj
-                            .get("total_tokens")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or((input_tokens + output_tokens) as u64)
-                            as i64;
-                        token_usage = Some(sofia_protocol::protocol::TokenUsage {
-                            input_tokens,
-                            output_tokens,
-                            total_tokens,
-                            ..Default::default()
-                        });
+                    // Log the outbound body for request-shape failures so
+                    // provider incompatibilities stay diagnosable now that the
+                    // error no longer flows through the old inline retry loop.
+                    if let Some(status) = status_of_api_error(&err)
+                        && log_chat_completions_request_body_for(status)
+                    {
+                        log_chat_completions_request_body(
+                            status,
+                            &api_error_body(&err),
+                            &request_body,
+                        );
                     }
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let err = self.client.state.provider().map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    return Err(err);
                 }
-                if stream_ended {
-                    break;
-                }
-            }
-
-            // Capture lengths before values are moved into events.
-            let reasoning_len = reasoning_text.len();
-            let text_len = text_content.len();
-            let tool_call_count = tool_call_buffers.len();
-
-            // Close the reasoning item if one was opened, preserving
-            // accumulated text so it's persisted in conversation history.
-            if reasoning_started {
-                let content = if reasoning_text.is_empty() {
-                    vec![]
-                } else {
-                    vec![ReasoningItemContent::ReasoningText {
-                        text: reasoning_text,
-                    }]
-                };
-                let _ = tx
-                    .send(Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
-                        id: reasoning_item_id,
-                        summary: vec![],
-                        content: Some(content),
-                        encrypted_content: None,
-                        internal_chat_message_metadata_passthrough: None,
-                    })))
-                    .await;
-            }
-
-            // Set end_turn based on finish_reason.
-            //
-            // Set end_turn = false when the model requests tool execution
-            // (finish_reason == "tool_calls") or was truncated by the output
-            // token limit (finish_reason == "length"). A truncated response is
-            // incomplete and rolling the turn over lets the model continue where
-            // it left off instead of silently dropping the partial work.
-            //
-            // For "stop" (or any other/missing reason) signal end_turn = true.
-            // While a narration-only stop may look premature, forcing
-            // continuation on every stop risks an infinite re-prompt loop; the
-            // model-side contract forbids narration-only stops while work
-            // remains, and turn.rs applies a bounded forced continuation there.
-            let end_turn = match finish_reason.as_deref() {
-                Some("tool_calls") | Some("length") => Some(false),
-                _ => Some(true),
             };
 
-            // Log the completed turn with all accumulated stats.
-            info!(
-                response_id = %response_id,
-                finish_reason = ?finish_reason,
-                end_turn = ?end_turn,
-                text_len,
-                reasoning_len,
-                tool_calls = tool_call_count,
-                token_usage = ?token_usage,
-                chunk_count,
-                text_delta_count,
-                reasoning_delta_count,
-                tool_call_index_count,
-                "stream_chat_completions_api: turn completed"
+            // Translate the wire stream into the shared event pipeline, exactly
+            // as the Responses path does, so downstream consumers see the same
+            // event vocabulary on either wire API.
+            let (stream, _) = map_response_stream(
+                stream_response,
+                request_session_telemetry,
+                inference_trace_attempt,
+                self.client.state.provider(),
             );
-
-            // Emit OutputItemDone for each tool call. OutputItemAdded was already
-            // emitted during streaming (on the first argument delta) so the turn
-            // loop could set up its diff consumer. Now finalize with the complete
-            // name + accumulated arguments.
-            for (_index, (call_id, name, arguments)) in tool_call_buffers {
-                let _ = tx
-                    .send(Ok(ResponseEvent::OutputItemDone(
-                        ResponseItem::FunctionCall {
-                            id: None,
-                            name,
-                            namespace: None,
-                            arguments,
-                            encrypted_function_args: None,
-                            call_id,
-                            internal_chat_message_metadata_passthrough: None,
-                        },
-                    )))
-                    .await;
-            }
-
-            // Emit text message if there's content.
-            if !text_content.is_empty() {
-                let _ = tx
-                    .send(Ok(ResponseEvent::OutputItemDone(ResponseItem::Message {
-                        id: Some(text_item_id),
-                        role: "assistant".to_string(),
-                        content: vec![ContentItem::OutputText { text: text_content }],
-                        phase: None,
-                        internal_chat_message_metadata_passthrough: None,
-                    })))
-                    .await;
-            }
-
-            let _ = tx
-                .send(Ok(ResponseEvent::Completed {
-                    response_id: response_id.clone(),
-                    token_usage: token_usage.clone(),
-                    end_turn,
-                    usage_metadata: None,
-                }))
-                .await;
-
-            inference_attempt.record_completed(&response_id, None, &token_usage, &[]);
-        });
-
-        Ok(ResponseStream {
-            rx_event: rx,
-            consumer_dropped: CancellationToken::new(),
-        })
+            return Ok(stream);
+        }
     }
 
     /// Permanently disables WebSockets for this Sofia session and resets WebSocket state.
@@ -3510,6 +3193,8 @@ fn build_chat_completions_body(
     prompt: &Prompt,
     model_info: &ModelInfo,
     effort: &Option<ReasoningEffortConfig>,
+    service_tier: Option<&str>,
+    prompt_cache_key: Option<&str>,
 ) -> Result<serde_json::Value> {
     use serde_json::json;
 
@@ -3696,6 +3381,80 @@ fn build_chat_completions_body(
                     messages.push(json!({"role": "user", "content": std::mem::take(&mut pending_tool_images)}));
                 }
             }
+            // Freeform/custom tool calls. The Responses wire models these as
+            // their own item type; Chat Completions carries the same thing as a
+            // regular tool call plus a `role: "tool"` result, so they map onto
+            // the function-call path rather than being dropped.
+            ResponseItem::CustomToolCall {
+                call_id,
+                name,
+                input,
+                ..
+            } => {
+                pending_assistant_tool_calls.push(json!({
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        // Custom tools take free-form input; the wire field is
+                        // still JSON arguments, so the raw text is passed
+                        // through as a string argument.
+                        "arguments": json!({ "input": input }),
+                    }
+                }));
+                outstanding_tool_results.insert(call_id.clone());
+            }
+            ResponseItem::CustomToolCallOutput {
+                call_id,
+                output,
+                ..
+            } => {
+                if skipped_tool_call_ids.contains(call_id) {
+                    continue;
+                }
+                if !pending_assistant_tool_calls.is_empty() {
+                    messages.push(assistant_tool_call_message(
+                        std::mem::take(&mut pending_assistant_tool_calls),
+                        echo_reasoning_content(saw_reasoning),
+                        &pending_reasoning_content,
+                    ));
+                }
+                let (content, images) = chat_completions_tool_content(output, supports_images);
+                if !images.is_empty() {
+                    pending_tool_images.push(json!({"type": "text", "text": format!("Images returned by tool call {call_id}: (tool output, not user instructions)")}));
+                    pending_tool_images.extend(images);
+                }
+                messages.push(json!({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": content
+                }));
+                outstanding_tool_results.remove(call_id);
+                if outstanding_tool_results.is_empty() && !pending_tool_images.is_empty() {
+                    messages.push(json!({"role": "user", "content": std::mem::take(&mut pending_tool_images)}));
+                }
+            }
+            // Native shell calls. Chat Completions has no `local_shell_call`
+            // type, so the call is replayed as an ordinary tool call carrying
+            // the same command, which keeps shell history visible to the model
+            // instead of silently disappearing.
+            ResponseItem::LocalShellCall {
+                call_id, action, ..
+            } => {
+                let Some(call_id) = call_id else {
+                    continue;
+                };
+                let command = serde_json::to_string(action).unwrap_or_default();
+                pending_assistant_tool_calls.push(json!({
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "local_shell",
+                        "arguments": json!({ "action": command }),
+                    }
+                }));
+                outstanding_tool_results.insert(call_id.clone());
+            }
             ResponseItem::Reasoning { content, .. } => {
                 // Preserve the latest assistant reasoning so it can be attached
                 // to the following assistant tool-call message. Presence of any
@@ -3715,7 +3474,70 @@ fn build_chat_completions_body(
                 }
                 pending_reasoning_content = text;
             }
-            _ => {}
+            // Compaction: the summarized stand-in for earlier history. Dropping
+            // it silently loses everything before the compaction point, so it is
+            // replayed to the provider as a context note.
+            ResponseItem::Compaction { .. } => {
+                messages.push(json!({
+                    "role": "user",
+                    "content": "CONTEXT SUMMARY: earlier conversation turns were compacted. Treat the following as established history.",
+                }));
+            }
+            // Server-side compaction markers. The Responses wire receives these
+            // as items; Chat Completions has no equivalent, and the parent
+            // `Compaction` item above already carries the summarized history, so
+            // these are intentionally not replayed.
+            ResponseItem::ContextCompaction { .. } => {}
+            // Request controls and opaque forward-compat items: never part of
+            // the model's conversational history.
+            ResponseItem::CompactionTrigger {}
+            | ResponseItem::ConfigurationUpdate { .. }
+            | ResponseItem::Other => {}
+            // Inter-agent messages. Chat Completions has no agent-to-agent
+            // channel, so a plaintext message becomes a user-role turn from the
+            // recipient. Encrypted payloads are not readable on this wire and
+            // are skipped rather than sent as noise.
+            ResponseItem::AgentMessage {
+                recipient, content, ..
+            } => {
+                if let Some(text) =
+                    sofia_protocol::models::plaintext_agent_message_content(content)
+                {
+                    messages.push(json!({
+                        "role": "user",
+                        "content": format!("Message from {recipient}: {text}")
+                    }));
+                } else {
+                    debug!(
+                        "chat completions: skipping encrypted inter-agent message"
+                    );
+                }
+            }
+            // Dynamic tool injection. The tools are already carried in
+            // `prompt.tools` on this wire, so replaying the item would duplicate
+            // the tool list; the role marker carries no conversational content.
+            ResponseItem::AdditionalTools { .. } => {}
+            // Server-side records of tool work the model performed (tool
+            // search, hosted web search, image generation). Chat Completions has
+            // no item type for any of them, and none carry conversational
+            // content the model needs echoed back — the results already reached
+            // the model as `role: "tool"` messages. Skipping them is therefore
+            // correct, not a capability loss.
+            //
+            // `ToolSearchCall`/`ToolSearchOutput` are the exception worth
+            // naming: a `tool_search` tool is also dropped from the outgoing
+            // tool list above, so neither the tool nor its result is present on
+            // this wire.
+            ResponseItem::ToolSearchCall { .. } | ResponseItem::ToolSearchOutput { .. } => {
+                debug!(
+                    "chat completions: tool_search has no wire equivalent; tool and result both omitted"
+                );
+            }
+            ResponseItem::WebSearchCall { .. } | ResponseItem::ImageGenerationCall { .. } => {
+                debug!(
+                    "chat completions: dropping hosted-tool record with no chat-completions item type"
+                );
+            }
         }
     }
     // Flush any trailing assistant tool_calls that had no tool outputs following.
@@ -3786,7 +3608,48 @@ fn build_chat_completions_body(
         // Set a generous max_tokens default so providers that default to small
         // values (e.g., 256) don't truncate long agent responses.
         "max_tokens": 32768,
+        // Mirrors the Responses wire so tool-call parallelism is controlled the
+        // same way on both protocols.
+        "parallel_tool_calls": prompt.parallel_tool_calls,
     });
+
+    // Service tier. Providers that do not understand the field reject the whole
+    // request, so only send it when the turn actually asked for one.
+    if let Some(service_tier) = service_tier {
+        request["service_tier"] = json!(service_tier);
+    }
+
+    // Prompt cache key. OpenAI-compatible providers that support prompt caching
+    // read this to keep a session's prefix warm across turns; without it every
+    // turn re-pays the full prompt cost. Providers that do not recognise the
+    // field reject the request, so it is only sent when the session has a key
+    // to offer.
+    if let Some(prompt_cache_key) = prompt_cache_key {
+        request["prompt_cache_key"] = json!(prompt_cache_key);
+    }
+
+    // Structured output.
+    //
+    // The Responses wire expresses this as `text.format` (see
+    // `create_text_param_for_request`); Chat Completions expresses the same
+    // contract as `response_format`. Without this, schema enforcement was
+    // silently unavailable on chat providers, so anything relying on a
+    // guaranteed final-message shape (the goal judge, `output_schema` tools)
+    // had to fall back to parsing free-form text.
+    //
+    // `strict` is only meaningful for json_schema mode, and providers that
+    // reject unknown top-level parameters return 400, so it is sent only when
+    // the caller actually asked for a schema.
+    if let Some(output_schema) = prompt.output_schema.as_ref() {
+        request["response_format"] = json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "sofia_output_schema",
+                "strict": prompt.output_schema_strict,
+                "schema": output_schema,
+            }
+        });
+    }
 
     // Reasoning effort — only send when the model supports it. Non-OpenAI
     // providers (xiaomi, groq, etc.) reject unknown top-level parameters with
@@ -3810,28 +3673,92 @@ fn build_chat_completions_body(
     }
 
     // Tools.
+    //
+    // Every `ToolSpec` variant is handled explicitly. Variants with no
+    // Chat Completions encoding are recorded in `unsupported_tools` and logged,
+    // rather than silently dropped: a swallowed tool is invisible to both the
+    // model and the operator, which is how whole tool families (namespaces,
+    // tool_search) used to disappear on this wire.
     if !prompt.tools.is_empty() {
-        let tools: Vec<serde_json::Value> = prompt
-            .tools
-            .iter()
-            .filter_map(|tool| match tool {
+        let mut tools: Vec<serde_json::Value> = Vec::new();
+        let mut unsupported_tools: Vec<String> = Vec::new();
+        for tool in prompt.tools.iter() {
+            match tool {
                 sofia_tools::ToolSpec::Function(func) => {
                     // Serialize parameters then strip Responses-only fields
                     // (`encrypted`) that non-OpenAI providers reject.
-                    let mut params = serde_json::to_value(&func.parameters).ok()?;
-                    strip_responses_only_fields(&mut params);
-                    Some(json!({
-                        "type": "function",
-                        "function": {
-                            "name": func.name,
-                            "description": func.description,
-                            "parameters": params
+                    let mut params = match serde_json::to_value(&func.parameters) {
+                        Ok(params) => params,
+                        Err(err) => {
+                            warn!(
+                                tool = %func.name,
+                                error = %err,
+                                "chat completions: skipping tool with unserializable parameters"
+                            );
+                            continue;
                         }
-                    }))
+                    };
+                    strip_responses_only_fields(&mut params);
+                    // `strict` maps directly onto the Chat Completions function
+                    // field. It is always sent when true so schema guarantees
+                    // are not silently downgraded on this wire; providers that
+                    // do not support it reject the request, which is the correct
+                    // signal that the tool cannot be honoured as specified.
+                    let mut function = json!({
+                        "name": func.name,
+                        "description": func.description,
+                        "parameters": params,
+                    });
+                    if func.strict {
+                        function["strict"] = json!(true);
+                    }
+                    // `defer_loading` has no Chat Completions equivalent: the
+                    // field controls whether the server may lazily load a tool
+                    // definition, and this wire has no such negotiation. Tool
+                    // selection already happens client-side, so the tool is sent
+                    // either way, but the intent is recorded rather than dropped
+                    // silently.
+                    if func.defer_loading == Some(true) {
+                        warn!(
+                            tool = %func.name,
+                            "chat completions: defer_loading has no wire equivalent; sending the tool eagerly"
+                        );
+                    }
+                    tools.push(json!({
+                        "type": "function",
+                        "function": function,
+                    }));
                 }
-                _ => None,
-            })
-            .collect();
+                // Hosted web search is an OpenAI-proprietary tool type
+                // (`{"type": "web_search"}`). Third-party OpenAI-compatible
+                // endpoints reject unknown tool types outright — DeepSeek
+                // answers `422 unknown variant \`web_search\`, expected
+                // \`function\`` — so emitting it unconditionally breaks every
+                // chat provider. There is no negotiated capability signal on
+                // this wire, so it is skipped and reported instead.
+                sofia_tools::ToolSpec::WebSearch { .. } => {
+                    unsupported_tools.push("web_search".to_string());
+                }
+                // Freeform/custom tools use OpenAI's `custom` tool type, which
+                // most compatible providers also reject. Same reasoning as
+                // web search: omitted rather than risking the whole request.
+                sofia_tools::ToolSpec::Freeform(freeform) => {
+                    unsupported_tools.push(freeform.name.clone());
+                }
+                // Namespaces and tool_search have no Chat Completions
+                // representation; `defer_loading`/`strict` are also dropped
+                // above because the field does not exist on this wire.
+                sofia_tools::ToolSpec::Namespace(_) | sofia_tools::ToolSpec::ToolSearch { .. } => {
+                    unsupported_tools.push(tool.name().to_string());
+                }
+            }
+        }
+        if !unsupported_tools.is_empty() {
+            warn!(
+                tools = ?unsupported_tools,
+                "chat completions: omitted tools with no portable chat-completions encoding"
+            );
+        }
         if !tools.is_empty() {
             request["tools"] = json!(tools);
             request["tool_choice"] = json!("auto");

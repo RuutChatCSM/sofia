@@ -336,6 +336,12 @@ async fn guardian_test_session_and_turn_with_base_url(
     session.thread_id = fixed_guardian_parent_session_id();
     let mut config = (*turn.config).clone();
     config.model_provider.base_url = Some(format!("{base_url}/v1"));
+    // The goal stop-condition judge defaults on in production and issues a
+    // second model call at the end of every turn. These harnesses script only
+    // the guardian exchange, so the judge would consume an unscripted response.
+    // Mirrors `load_default_config_for_test_with_cloud_config_bundle`; tests that
+    // exercise the judge opt back in and script its reply.
+    config.goal_judge_enabled = false;
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.sofia_home.to_path_buf(),

@@ -218,6 +218,10 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
         .expect("test setup should allow enabling guardian approvals");
     config.approvals_reviewer = ApprovalsReviewer::AutoReview;
     config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
+    // The goal stop-condition judge defaults on in production and issues a
+    // second model call at the end of every turn. This harness scripts only the
+    // guardian exchange, so the judge would consume an unscripted response.
+    config.goal_judge_enabled = false;
     let config = Arc::new(config);
     let models_manager = models_manager_with_provider(
         config.sofia_home.to_path_buf(),

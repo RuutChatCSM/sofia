@@ -1406,6 +1406,8 @@ fn chat_completions_body_reconstructs_assistant_tool_calls_before_tool_outputs()
         &prompt,
         &test_model_info(),
         &Some(sofia_protocol::openai_models::ReasoningEffort::Medium),
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
     )
     .unwrap();
     let messages = body["messages"].as_array().unwrap();
@@ -1459,7 +1461,7 @@ fn chat_completions_body_maps_developer_role_to_system() {
         },
         ..Default::default()
     };
-    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
 
     // The Responses-only `developer` role is folded into `system`; DeepSeek and
@@ -1538,7 +1540,7 @@ fn chat_completions_body_carries_reasoning_content_on_tool_call_message() {
         },
         ..Default::default()
     };
-    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
 
     // system, user, assistant(text), assistant(tool_calls), tool. DeepSeek
@@ -1609,7 +1611,7 @@ fn chat_completions_body_sets_reasoning_content_even_when_empty() {
         },
         ..Default::default()
     };
-    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
 
     assert_eq!(messages[2]["role"], "assistant");
@@ -1661,7 +1663,7 @@ fn chat_completions_body_does_not_force_continuation_after_tool_output() {
         ..Default::default()
     };
 
-    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
 
     assert_eq!(messages.len(), 4);
@@ -1764,6 +1766,8 @@ fn chat_completions_body_multi_iteration_reproduces_400() {
         &prompt,
         &test_model_info(),
         &Some(sofia_protocol::openai_models::ReasoningEffort::Medium),
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
     )
     .unwrap();
     println!("REPRO_BODY={}", serde_json::to_string(&body).unwrap());
@@ -1822,7 +1826,7 @@ fn chat_completions_body_echoes_reasoning_content_without_reasoning_item() {
         ..Default::default()
     };
 
-    let body = build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+    let body = build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
 
     assert_eq!(messages[2]["role"], "assistant");
@@ -1881,6 +1885,8 @@ fn chat_completions_body_omits_reasoning_content_when_reasoning_disabled() {
         &prompt,
         &test_model_info(),
         &Some(sofia_protocol::openai_models::ReasoningEffort::None),
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
     )
     .unwrap();
     let messages = body["messages"].as_array().unwrap();
@@ -1942,6 +1948,8 @@ fn chat_completions_reasoning_content_repair_echoes_field_on_tool_calls() {
         &prompt,
         &test_model_info(),
         &Some(sofia_protocol::openai_models::ReasoningEffort::None),
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
     )
     .unwrap();
     let messages = body["messages"].as_array().unwrap();
@@ -1976,7 +1984,7 @@ fn chat_completions_body_echoes_reasoning_on_narration_without_reasoning_item() 
         ..Default::default()
     };
     let body =
-        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     assert_eq!(
         body["messages"][1],
         serde_json::json!({
@@ -2026,7 +2034,7 @@ fn chat_completions_preserves_user_images_and_image_only_messages() {
         ..Default::default()
     };
     let body =
-        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     assert_eq!(
         body["messages"][1],
         json!({"role": "user", "content": [
@@ -2051,7 +2059,7 @@ fn chat_completions_keeps_tool_images_after_the_complete_parallel_batch() {
         ..Default::default()
     };
     let body =
-        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
     assert_eq!(
         messages
@@ -2090,12 +2098,406 @@ fn chat_completions_does_not_send_images_to_text_only_models() {
         .unwrap(),
         ..Default::default()
     };
-    let body = crate::client::build_chat_completions_body(&prompt, &model, &None).unwrap();
+    let body = crate::client::build_chat_completions_body(&prompt, &model, &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     assert_eq!(
         body["messages"][2]["content"],
         "Image unavailable: the selected model does not support image input."
     );
     assert!(!body.to_string().contains("data:image"));
+}
+
+#[test]
+fn chat_completions_omits_hosted_web_search_tool() {
+    // `web_search` is an OpenAI-proprietary tool type. Third-party
+    // OpenAI-compatible endpoints reject it outright (DeepSeek answers
+    // "422 unknown variant `web_search`, expected `function`"), so emitting it
+    // unconditionally breaks every chat provider. It is omitted instead.
+    let prompt = Prompt {
+        tools: std::sync::Arc::from([sofia_tools::ToolSpec::WebSearch {
+            external_web_access: None,
+            indexed_web_access: None,
+            filters: None,
+            user_location: None,
+            search_context_size: None,
+            search_content_types: None,
+        }]),
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    assert!(
+        body.get("tools").is_none(),
+        "a hosted-only tool list must not be sent using an unsupported type, got {body:?}"
+    );
+}
+
+#[test]
+fn chat_completions_encodes_function_tools_alongside_hosted_tools() {
+    let prompt = Prompt {
+        tools: std::sync::Arc::from([
+            sofia_tools::ToolSpec::Function(sofia_tools::ResponsesApiTool {
+                name: "shell".to_string(),
+                description: "run a command".to_string(),
+                strict: false,
+                defer_loading: None,
+                parameters: sofia_tools::JsonSchema::object(Default::default(), None, None),
+                output_schema: None,
+            }),
+            sofia_tools::ToolSpec::WebSearch {
+                external_web_access: None,
+                indexed_web_access: None,
+                filters: None,
+                user_location: None,
+                search_context_size: None,
+                search_content_types: None,
+            },
+        ]),
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    let tools = body["tools"].as_array().expect("tools array");
+    assert_eq!(tools.len(), 1, "only portable function tools are sent");
+    assert_eq!(tools[0]["type"], "function");
+    assert_eq!(tools[0]["function"]["name"], "shell");
+}
+
+#[test]
+fn chat_completions_preserves_internal_model_context_fragments() {
+    // Goal-extension steering (continuation / budget-limit / objective-updated)
+    // is injected as an `InternalModelContextFragment`, which becomes a
+    // user-role `ResponseItem::Message`. The chat wire must carry that text to
+    // the model, otherwise steering silently stops working on chat providers.
+    use crate::context::ContextualUserFragment;
+    use crate::context::InternalContextSource;
+    use crate::context::InternalModelContextFragment;
+    // Mirrors `ext/goal::steering::goal_context_input_item` exactly.
+    let item: sofia_protocol::models::ResponseItem =
+        ContextualUserFragment::into(InternalModelContextFragment::new(
+            InternalContextSource::from_static("goal"),
+            "CONTINUE the active goal: ship the release.",
+        ));
+    let prompt = Prompt {
+        input: vec![item],
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    let rendered = serde_json::to_string(&body["messages"]).unwrap();
+    assert!(
+        rendered.contains("CONTINUE the active goal: ship the release."),
+        "internal goal context must reach the model on the chat wire, got {rendered}"
+    );
+}
+
+#[test]
+fn chat_completions_sends_structured_output_schema() {
+    // The Responses wire carries this as `text.format`; Chat Completions needs
+    // `response_format`. Without it, schema-guaranteed final messages were
+    // silently unavailable on chat providers.
+    let schema = json!({
+        "type": "object",
+        "properties": {"verdict": {"type": "string", "enum": ["SATISFIED", "INCOMPLETE"]}},
+        "required": ["verdict"],
+    });
+    let prompt = Prompt {
+        output_schema: Some(schema.clone()),
+        output_schema_strict: true,
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    assert_eq!(body["response_format"]["type"], "json_schema");
+    assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+    assert_eq!(
+        body["response_format"]["json_schema"]["schema"],
+        schema
+    );
+}
+
+#[test]
+fn chat_completions_omits_response_format_without_a_schema() {
+    let prompt = Prompt::default();
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    assert!(
+        body.get("response_format").is_none(),
+        "providers that do not support structured output reject the field"
+    );
+}
+
+#[test]
+fn chat_completions_sends_strict_function_tools() {
+    let prompt = Prompt {
+        tools: std::sync::Arc::from([sofia_tools::ToolSpec::Function(
+            sofia_tools::ResponsesApiTool {
+                name: "shell".to_string(),
+                description: "run a command".to_string(),
+                strict: true,
+                defer_loading: None,
+                parameters: sofia_tools::JsonSchema::object(Default::default(), None, None),
+                output_schema: None,
+            },
+        )]),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    assert_eq!(body["tools"][0]["function"]["strict"], true);
+}
+
+#[test]
+fn chat_completions_omits_strict_when_not_requested() {
+    let prompt = Prompt {
+        tools: std::sync::Arc::from([sofia_tools::ToolSpec::Function(
+            sofia_tools::ResponsesApiTool {
+                name: "shell".to_string(),
+                description: "run a command".to_string(),
+                strict: false,
+                defer_loading: None,
+                parameters: sofia_tools::JsonSchema::object(Default::default(), None, None),
+                output_schema: None,
+            },
+        )]),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    assert!(
+        body["tools"][0]["function"].get("strict").is_none(),
+        "strict=false is the wire default and is omitted rather than sent"
+    );
+}
+
+#[test]
+fn chat_completions_sends_prompt_cache_key() {
+    let prompt = Prompt::default();
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ Some("session-abc"),
+    )
+    .unwrap();
+    assert_eq!(body["prompt_cache_key"], "session-abc");
+}
+
+#[test]
+fn chat_completions_encodes_custom_tool_calls() {
+    // Freeform tool calls previously fell through the drop arm, breaking the
+    // assistant-tool-call/tool-result pairing on the chat wire.
+    let prompt = Prompt {
+        input: serde_json::from_value(json!([
+            {"type": "custom_tool_call", "call_id": "ct-1", "name": "patch", "input": "*** Begin Patch"},
+            {"type": "custom_tool_call_output", "call_id": "ct-1", "output": "applied"}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    let messages = body["messages"].as_array().expect("messages array");
+    let assistant = messages
+        .iter()
+        .find(|m| m["role"] == "assistant" && m.get("tool_calls").is_some())
+        .expect("assistant tool_calls message must precede the tool result");
+    assert_eq!(assistant["tool_calls"][0]["id"], "ct-1");
+    assert_eq!(assistant["tool_calls"][0]["function"]["name"], "patch");
+    assert!(messages
+        .iter()
+        .any(|m| m["role"] == "tool" && m["tool_call_id"] == "ct-1"));
+}
+
+#[test]
+fn chat_completions_encodes_local_shell_calls() {
+    let prompt = Prompt {
+        input: serde_json::from_value(json!([
+            {"type": "local_shell_call", "call_id": "sh-1", "status": "completed",
+             "action": {"type": "exec", "command": ["ls", "-la"]}}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    let rendered = serde_json::to_string(&body["messages"]).unwrap();
+    assert!(
+        rendered.contains("local_shell") && rendered.contains("sh-1"),
+        "shell history must stay visible to the model, got {rendered}"
+    );
+}
+
+#[test]
+fn chat_completions_encodes_plaintext_agent_messages() {
+    let prompt = Prompt {
+        input: serde_json::from_value(json!([
+            {"type": "agent_message", "author": "reviewer", "recipient": "worker",
+             "content": [{"type": "input_text", "text": "please re-check the migration"}]}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ None,
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    let rendered = serde_json::to_string(&body["messages"]).unwrap();
+    // The message is delivered to the recipient, so the user turn is addressed
+    // to `worker` and carries the plaintext body.
+    assert!(
+        rendered.contains("Message from worker: please re-check the migration"),
+        "inter-agent messages must reach the model, got {rendered}"
+    );
+}
+
+#[test]
+fn chat_completions_replays_compaction_instead_of_losing_history() {
+    // Dropping the compaction item silently discards everything before the
+    // compaction point on chat-completions providers.
+    let prompt = Prompt {
+        input: serde_json::from_value(json!([
+            {"type": "compaction", "id": "cmp_1", "encrypted_content": "summary blob"},
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "and then?"}]}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    let messages = body["messages"].as_array().expect("messages array");
+    assert!(
+        messages
+            .iter()
+            .any(|message| message["content"]
+                .as_str()
+                .is_some_and(|text| text.contains("CONTEXT SUMMARY"))),
+        "compacted history must be represented on the chat wire, got {messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message["content"].as_str() == Some("and then?")),
+        "post-compaction turns must still reach the model"
+    );
+}
+
+#[test]
+fn chat_completions_sends_parallel_tool_calls_flag() {
+    let prompt = Prompt {
+        parallel_tool_calls: true,
+        ..Default::default()
+    };
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    assert_eq!(body["parallel_tool_calls"], json!(true));
+}
+
+#[test]
+fn chat_completions_omits_service_tier_when_unset() {
+    let prompt = Prompt::default();
+    let body =
+        crate::client::build_chat_completions_body(
+            &prompt,
+            &test_model_info(),
+            &None,
+            /*service_tier*/ None,
+            /*prompt_cache_key*/ None,
+        )
+        .unwrap();
+    assert!(
+        body.get("service_tier").is_none(),
+        "providers that do not support service tiers reject the field outright"
+    );
+}
+
+#[test]
+fn chat_completions_sends_service_tier_when_requested() {
+    let prompt = Prompt::default();
+    let body = crate::client::build_chat_completions_body(
+        &prompt,
+        &test_model_info(),
+        &None,
+        /*service_tier*/ Some("priority"),
+        /*prompt_cache_key*/ None,
+    )
+    .unwrap();
+    assert_eq!(body["service_tier"], "priority");
 }
 
 #[test]
@@ -2114,7 +2516,7 @@ fn chat_completions_keeps_tool_images_when_an_output_is_missing() {
         ..Default::default()
     };
     let body =
-        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None).unwrap();
+        crate::client::build_chat_completions_body(&prompt, &test_model_info(), &None, /*service_tier*/ None, /*prompt_cache_key*/ None).unwrap();
     let messages = body["messages"].as_array().unwrap();
     assert_eq!(
         messages
