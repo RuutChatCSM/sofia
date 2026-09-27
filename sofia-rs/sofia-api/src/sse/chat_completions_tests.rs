@@ -9,10 +9,10 @@
 
 use super::*;
 use crate::common::ResponseEvent;
+use bytes::Bytes;
 use http::HeaderMap;
 use http::HeaderValue;
 use http::StatusCode;
-use bytes::Bytes;
 use serde_json::json;
 use sofia_client::TransportError;
 
@@ -113,10 +113,7 @@ async fn chat_stream_emits_header_events() {
 async fn chat_stream_captures_turn_state_header() {
     let turn_state = Arc::new(OnceLock::new());
     let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-sofia-turn-state",
-        HeaderValue::from_static("state-abc"),
-    );
+    headers.insert("x-sofia-turn-state", HeaderValue::from_static("state-abc"));
 
     let _ = spawn_chat_completions_stream(
         stream_response(headers, Vec::new()),
@@ -176,7 +173,9 @@ async fn chat_stream_text_and_completion() {
         panic!("expected completed event");
     };
     assert_eq!(end_turn, &Some(true));
-    let usage = token_usage.as_ref().expect("token usage should be reported");
+    let usage = token_usage
+        .as_ref()
+        .expect("token usage should be reported");
     assert_eq!(usage.input_tokens, 7);
     assert_eq!(usage.output_tokens, 3);
     assert_eq!(usage.total_tokens, 10);
@@ -237,7 +236,9 @@ async fn chat_stream_tool_call_accumulates_arguments() {
 
 #[tokio::test]
 async fn chat_stream_length_finish_reason_keeps_turn_open() {
-    let chunks = sse_events(&[json!({"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]})]);
+    let chunks = sse_events(&[
+        json!({"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]}),
+    ]);
 
     let events = collect(spawn_chat_completions_stream(
         stream_response(HeaderMap::new(), chunks),
@@ -314,14 +315,12 @@ async fn chat_stream_ignores_unparsable_payloads() {
 
 #[tokio::test]
 async fn chat_stream_transport_error_surfaces_as_stream_error() {
-    let bytes: ByteStream = Box::pin(futures::stream::iter(vec![Err(
-        TransportError::Http {
-            status: StatusCode::BAD_GATEWAY,
-            url: Some("https://openrouter.ai/api/v1/chat/completions".to_string()),
-            headers: None,
-            body: Some("upstream returned 502".to_string()),
-        },
-    )]));
+    let bytes: ByteStream = Box::pin(futures::stream::iter(vec![Err(TransportError::Http {
+        status: StatusCode::BAD_GATEWAY,
+        url: Some("https://openrouter.ai/api/v1/chat/completions".to_string()),
+        headers: None,
+        body: Some("upstream returned 502".to_string()),
+    })]));
     let stream_response = StreamResponse {
         status: StatusCode::OK,
         headers: HeaderMap::new(),
@@ -342,5 +341,8 @@ async fn chat_stream_transport_error_surfaces_as_stream_error() {
             break;
         }
     }
-    assert!(saw_error, "a transport failure must be reported to the consumer");
+    assert!(
+        saw_error,
+        "a transport failure must be reported to the consumer"
+    );
 }

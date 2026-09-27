@@ -22,10 +22,11 @@ use futures::StreamExt;
 use serde_json::Value;
 use sofia_client::ByteStream;
 use sofia_client::StreamResponse;
-use sofia_protocol::models::ContentItem;
-use sofia_protocol::models::ResponseItem;
 use sofia_protocol::ResponseItemId;
+use sofia_protocol::models::ContentItem;
+use sofia_protocol::models::MessagePhase;
 use sofia_protocol::models::ReasoningItemContent;
+use sofia_protocol::models::ResponseItem;
 use sofia_protocol::protocol::TokenUsage;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -83,9 +84,7 @@ pub async fn process_chat_completions_sse(
     let mut tool_call_buffers: BTreeMap<u64, (String, String, String)> = BTreeMap::new();
 
     let _ = tx_event
-        .send(Ok(ResponseEvent::Created {
-            response_id: None,
-        }))
+        .send(Ok(ResponseEvent::Created { response_id: None }))
         .await;
 
     let mut chunk_count: u64 = 0;
@@ -109,9 +108,7 @@ pub async fn process_chat_completions_sse(
             Ok(Some(Ok(sse))) => sse,
             Ok(Some(Err(e))) => {
                 debug!("chat completions SSE error: {e:#}");
-                let _ = tx_event
-                    .send(Err(ApiError::Stream(e.to_string())))
-                    .await;
+                let _ = tx_event.send(Err(ApiError::Stream(e.to_string()))).await;
                 return;
             }
             Ok(None) => {
@@ -156,16 +153,19 @@ pub async fn process_chat_completions_sse(
                     {
                         if !text_started {
                             text_started = true;
+                            // `phase` is not knowable yet: whether this prose is
+                            // mid-turn commentary or the turn's answer depends on
+                            // how the response ends, which we only learn from
+                            // `finish_reason` at the tail. `finalize_chat_turn`
+                            // sets it on the completed item.
                             let _ = tx_event
-                                .send(Ok(ResponseEvent::OutputItemAdded(
-                                    ResponseItem::Message {
-                                        id: Some(text_item_id.clone()),
-                                        role: "assistant".to_string(),
-                                        content: Vec::new(),
-                                        phase: None,
-                                        internal_chat_message_metadata_passthrough: None,
-                                    },
-                                )))
+                                .send(Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message {
+                                    id: Some(text_item_id.clone()),
+                                    role: "assistant".to_string(),
+                                    content: Vec::new(),
+                                    phase: None,
+                                    internal_chat_message_metadata_passthrough: None,
+                                })))
                                 .await;
                         }
                         text_content.push_str(text);
@@ -215,10 +215,7 @@ pub async fn process_chat_completions_sse(
                     // OutputItemDone.
                     if let Some(tool_calls) = delta.get("tool_calls").and_then(|t| t.as_array()) {
                         for tc in tool_calls {
-                            let index = tc
-                                .get("index")
-                                .and_then(Value::as_u64)
-                                .unwrap_or(0);
+                            let index = tc.get("index").and_then(Value::as_u64).unwrap_or(0);
                             let entry = tool_call_buffers.entry(index).or_insert_with(|| {
                                 (
                                     format!("{response_id}_tc_{index}"),
@@ -293,7 +290,8 @@ pub async fn process_chat_completions_sse(
             let total_tokens = usage_obj
                 .get("total_tokens")
                 .and_then(Value::as_u64)
-                .unwrap_or((input_tokens + output_tokens) as u64) as i64;
+                .unwrap_or((input_tokens + output_tokens) as u64)
+                as i64;
             token_usage = Some(TokenUsage {
                 input_tokens,
                 output_tokens,
@@ -367,10 +365,23 @@ async fn finalize_chat_turn(
         _ => Some(true),
     };
 
+    // Chat Completions has no `phase` field. The Responses wire passes one
+    // through from the provider, so nothing downstream has to guess; the same
+    // signal is derivable here. Prose emitted alongside tool calls is mid-turn
+    // commentary, prose from the response that ends the turn is the answer.
+    // Left `None`, every assistant message arrives unphased and the transcript
+    // falls back to guessing which prose is the reply.
+    let phase = if end_turn == Some(false) || tool_call_count > 0 {
+        MessagePhase::Commentary
+    } else {
+        MessagePhase::FinalAnswer
+    };
+
     info!(
         response_id = %response_id,
         finish_reason = ?finish_reason,
         end_turn = ?end_turn,
+        phase = ?phase,
         text_len,
         reasoning_len,
         tool_calls = tool_call_count,
@@ -402,7 +413,7 @@ async fn finalize_chat_turn(
                 id: Some(text_item_id),
                 role: "assistant".to_string(),
                 content: vec![ContentItem::OutputText { text: text_content }],
-                phase: None,
+                phase: Some(phase),
                 internal_chat_message_metadata_passthrough: None,
             })))
             .await;

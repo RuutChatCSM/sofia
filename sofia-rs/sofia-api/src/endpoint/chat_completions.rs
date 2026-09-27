@@ -10,9 +10,9 @@
 use crate::Compression;
 use crate::auth::SharedAuthProvider;
 use crate::common::ResponseStream;
+use crate::endpoint::session::EndpointSession;
 use crate::error::ApiError;
 use crate::provider::Provider;
-use crate::endpoint::session::EndpointSession;
 use crate::telemetry::SseTelemetry;
 use http::HeaderMap;
 use http::Method;
@@ -69,8 +69,9 @@ impl<T: HttpTransport> ChatCompletionsClient<T> {
         compression: Compression,
         turn_state: Option<Arc<OnceLock<String>>>,
     ) -> Result<ResponseStream, ApiError> {
-        let body = EncodedJsonBody::encode(&body)
-            .map_err(|e| ApiError::Stream(format!("failed to encode chat completions request: {e}")))?;
+        let body = EncodedJsonBody::encode(&body).map_err(|e| {
+            ApiError::Stream(format!("failed to encode chat completions request: {e}"))
+        })?;
         self.stream_encoded(body, extra_headers, compression, turn_state)
             .await
     }

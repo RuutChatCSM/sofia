@@ -10,12 +10,12 @@ use crate::common::ResponseEvent;
 use crate::common::ResponseStream;
 use crate::error::ApiError;
 use crate::rate_limits::parse_all_rate_limits;
-use sofia_protocol::protocol::RateLimitSnapshot;
 use crate::safety_buffering::treatment_from_headers;
 use crate::telemetry::SseTelemetry;
 use http::HeaderMap;
 use sofia_client::ByteStream;
 use sofia_client::StreamResponse;
+use sofia_protocol::protocol::RateLimitSnapshot;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -92,7 +92,6 @@ impl HeaderEvents {
 /// consumes the byte stream and emits [`ResponseEvent`]s, so both parsers get
 /// identical channel semantics and terminal behaviour.
 pub(crate) fn spawn_wire_stream<F, Fut>(
-
     stream_response: StreamResponse,
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
@@ -101,8 +100,9 @@ pub(crate) fn spawn_wire_stream<F, Fut>(
     parse: F,
 ) -> ResponseStream
 where
-    F: Send + 'static + FnOnce(
-
+    F: Send
+        + 'static
+        + FnOnce(
             ByteStream,
             mpsc::Sender<Result<ResponseEvent, ApiError>>,
             Duration,
@@ -112,7 +112,8 @@ where
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
     let header_events = HeaderEvents::from_headers(&stream_response.headers);
-    if let (Some(turn_state), Some(captured)) = (turn_state.as_ref(), header_events.turn_state.as_ref())
+    if let (Some(turn_state), Some(captured)) =
+        (turn_state.as_ref(), header_events.turn_state.as_ref())
     {
         let _ = turn_state.set(captured.clone());
     }

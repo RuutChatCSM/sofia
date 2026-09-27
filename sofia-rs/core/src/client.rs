@@ -211,7 +211,9 @@ fn session_telemetry_for_request(
 /// `TransportError::Http`, so status-based recovery decisions read it back out.
 fn status_of_api_error(err: &ApiError) -> Option<http::StatusCode> {
     match err {
-        ApiError::Transport(sofia_http_client::TransportError::Http { status, .. }) => Some(*status),
+        ApiError::Transport(sofia_http_client::TransportError::Http { status, .. }) => {
+            Some(*status)
+        }
         ApiError::Api { status, .. } => Some(*status),
         _ => None,
     }
@@ -2226,10 +2228,9 @@ impl ModelClientSession {
         let mut reasoning_content_recovery_used = false;
         loop {
             let client_setup = self.client.current_client_setup().await?;
-            let transport = self.client.build_api_transport(
-                &client_setup.api_provider,
-                CHAT_COMPLETIONS_ENDPOINT,
-            )?;
+            let transport = self
+                .client
+                .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?;
 
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
@@ -2293,9 +2294,11 @@ impl ModelClientSession {
                         {
                             let response_debug_context =
                                 extract_response_debug_context(&unauthorized_transport);
-                            let err = self.client.state.provider().map_api_error(
-                                ApiError::Transport(unauthorized_transport),
-                            );
+                            let err = self
+                                .client
+                                .state
+                                .provider()
+                                .map_api_error(ApiError::Transport(unauthorized_transport));
                             inference_trace_attempt.record_failed(
                                 &err,
                                 response_debug_context.request_id.as_deref(),
@@ -3405,9 +3408,7 @@ fn build_chat_completions_body(
                 outstanding_tool_results.insert(call_id.clone());
             }
             ResponseItem::CustomToolCallOutput {
-                call_id,
-                output,
-                ..
+                call_id, output, ..
             } => {
                 if skipped_tool_call_ids.contains(call_id) {
                     continue;
@@ -3500,17 +3501,14 @@ fn build_chat_completions_body(
             ResponseItem::AgentMessage {
                 recipient, content, ..
             } => {
-                if let Some(text) =
-                    sofia_protocol::models::plaintext_agent_message_content(content)
+                if let Some(text) = sofia_protocol::models::plaintext_agent_message_content(content)
                 {
                     messages.push(json!({
                         "role": "user",
                         "content": format!("Message from {recipient}: {text}")
                     }));
                 } else {
-                    debug!(
-                        "chat completions: skipping encrypted inter-agent message"
-                    );
+                    debug!("chat completions: skipping encrypted inter-agent message");
                 }
             }
             // Dynamic tool injection. The tools are already carried in
