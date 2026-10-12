@@ -4,8 +4,23 @@ Release binaries and notes are published on the [releases page](https://github.c
 
 ## 0.1.5
 
-Model metadata, catalogs, and context-window limits now resolve against the
-active provider, and Anthropic runs over Chat Completions.
+Claude models now run over Anthropic's native Messages API with prompt caching,
+and model metadata, catalogs, and context-window limits resolve against the
+active provider.
+
+### Added
+
+- A native Anthropic Messages API wire (`wire_api = "anthropic"`) so Claude runs
+  through the real agent harness — function and freeform tools (including
+  `apply_patch`), extended thinking with signed-thinking replay, and correct
+  streaming — instead of Anthropic's degraded OpenAI-compatible
+  `/chat/completions` shim. Requests carry `x-api-key` and `anthropic-version`.
+- Automatic prompt caching for Anthropic requests via a top-level
+  `cache_control` breakpoint, so the stable prompt prefix is billed at cache-read
+  rates instead of full input rates.
+- A one-shot recovery when Anthropic rejects a request because `max_tokens`
+  exceeds the model's output cap: the turn retries with a reduced cap instead of
+  failing.
 
 ### Fixed
 
@@ -29,7 +44,6 @@ active provider, and Anthropic runs over Chat Completions.
 - A custom model catalog is merged over the bundled catalog instead of replacing
   it, preserving reasoning presets, guardian policy, and instruction templates
   for known models.
-- Anthropic is wired over Chat Completions rather than `/v1/responses`.
 - Sessions reuse the thread manager's model catalog when they resolve against
   the same provider and static catalog, so catalog refreshes stay visible to
   live sessions.
