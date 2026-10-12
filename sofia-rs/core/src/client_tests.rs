@@ -2595,3 +2595,322 @@ fn chat_completions_keeps_tool_images_when_an_output_is_missing() {
         "the screenshot from the completed call must still be sent: {carried:?}"
     );
 }
+
+fn anthropic_model_info(slug: &str, reasoning: bool) -> ModelInfo {
+    let mut model = test_model_info();
+    model.slug = slug.to_string();
+    if !reasoning {
+        model.supported_reasoning_levels.clear();
+    }
+    model
+}
+
+fn anthropic_prompt_with_tools() -> Prompt {
+    let mut prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "developer".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "be concise".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "patch the file".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+    prompt.tools = std::sync::Arc::from([
+        sofia_tools::ToolSpec::Function(sofia_tools::ResponsesApiTool {
+            name: "shell".to_string(),
+            description: "run a command".to_string(),
+            strict: false,
+            defer_loading: None,
+            parameters: sofia_tools::JsonSchema::object(Default::default(), None, None),
+            output_schema: None,
+        }),
+        sofia_tools::ToolSpec::Freeform(sofia_tools::FreeformTool {
+            name: "apply_patch".to_string(),
+            description: "edit files".to_string(),
+            defer_loading: None,
+            format: sofia_tools::FreeformToolFormat {
+                r#type: "grammar".to_string(),
+                syntax: "lark".to_string(),
+                definition: "start: /.+/".to_string(),
+            },
+        }),
+    ]);
+    prompt
+}
+
+#[test]
+fn anthropic_body_system_tools_cache_and_max_tokens() {
+    use crate::client::build_anthropic_body;
+
+    let prompt = anthropic_prompt_with_tools();
+    let model = anthropic_model_info("claude-sonnet-4-5-20250929", /*reasoning*/ true);
+    let body = build_anthropic_body(
+        &prompt,
+        &model,
+        &Some(sofia_protocol::openai_models::ReasoningEffort::Medium),
+    )
+    .unwrap();
+
+    // Base instructions and the folded `developer` message share one system field.
+    let system = body["system"].as_str().expect("system field");
+    assert!(system.contains("You are a coding agent."));
+    assert!(system.contains("be concise"));
+
+    assert_eq!(body["max_tokens"], 32768);
+    assert_eq!(body["stream"], true);
+    assert_eq!(body["cache_control"], json!({"type": "ephemeral"}));
+
+    let messages = body["messages"].as_array().unwrap();
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(messages[0]["content"][0]["type"], "text");
+    assert!(
+        messages
+            .iter()
+            .all(|message| message["role"] != "developer"),
+        "no message may carry the developer role"
+    );
+
+    let tools = body["tools"].as_array().unwrap();
+    let shell = tools
+        .iter()
+        .find(|tool| tool["name"] == "shell")
+        .expect("function tool");
+    assert_eq!(shell["description"], "run a command");
+    assert_eq!(shell["input_schema"]["type"], "object");
+
+    let apply_patch = tools
+        .iter()
+        .find(|tool| tool["name"] == "apply_patch")
+        .expect("freeform tool");
+    assert_eq!(apply_patch["input_schema"]["required"], json!(["input"]));
+    assert_eq!(
+        apply_patch["input_schema"]["properties"]["input"]["type"],
+        "string"
+    );
+}
+
+#[test]
+fn anthropic_body_maps_tool_use_and_tool_result() {
+    use crate::client::build_anthropic_body;
+    use sofia_protocol::ResponseItemId;
+    use sofia_protocol::models::FunctionCallOutputPayload;
+
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "go".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCall {
+                id: Some(ResponseItemId::new("fc1")),
+                name: "shell".to_string(),
+                namespace: None,
+                arguments: r#"{"cmd":"ls"}"#.to_string(),
+                encrypted_function_args: None,
+                call_id: "call_1".to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: Some(ResponseItemId::new("fco1")),
+                call_id: Some("call_1".to_string()),
+                name: Some("shell".to_string()),
+                namespace: None,
+                output: FunctionCallOutputPayload::from_text("done".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+    let body = build_anthropic_body(&prompt, &test_model_info(), &None).unwrap();
+    let messages = body["messages"].as_array().unwrap();
+
+    let tool_use = messages
+        .iter()
+        .flat_map(|message| message["content"].as_array().unwrap())
+        .find(|block| block["type"] == "tool_use")
+        .expect("tool_use block");
+    assert_eq!(tool_use["id"], "call_1");
+    assert_eq!(tool_use["name"], "shell");
+    assert_eq!(tool_use["input"], json!({"cmd": "ls"}));
+
+    let tool_result = messages
+        .iter()
+        .flat_map(|message| message["content"].as_array().unwrap())
+        .find(|block| block["type"] == "tool_result")
+        .expect("tool_result block");
+    assert_eq!(tool_result["tool_use_id"], "call_1");
+    assert_eq!(tool_result["content"], "done");
+}
+
+#[test]
+fn anthropic_body_emits_thinking_only_when_supported() {
+    use crate::client::build_anthropic_body;
+
+    let prompt = Prompt {
+        base_instructions: BaseInstructions {
+            text: "You are a coding agent.".to_string(),
+            provenance: None,
+        },
+        ..Default::default()
+    };
+
+    let claude_4 = anthropic_model_info("claude-sonnet-4-5-20250929", /*reasoning*/ true);
+    let body = build_anthropic_body(
+        &prompt,
+        &claude_4,
+        &Some(sofia_protocol::openai_models::ReasoningEffort::Medium),
+    )
+    .unwrap();
+    assert_eq!(
+        body["thinking"],
+        json!({"type": "enabled", "budget_tokens": 4096})
+    );
+
+    let claude_5 = anthropic_model_info("claude-sonnet-5-20260301", /*reasoning*/ true);
+    let body = build_anthropic_body(
+        &prompt,
+        &claude_5,
+        &Some(sofia_protocol::openai_models::ReasoningEffort::High),
+    )
+    .unwrap();
+    assert_eq!(body["thinking"], json!({"type": "adaptive"}));
+
+    let no_reasoning = anthropic_model_info("claude-sonnet-4-5-20250929", /*reasoning*/ false);
+    let body = build_anthropic_body(&prompt, &no_reasoning, &None).unwrap();
+    assert!(
+        body.get("thinking").is_none(),
+        "thinking must be omitted when the model advertises no reasoning capability"
+    );
+}
+
+#[test]
+fn anthropic_signed_thinking_is_replayed_before_tool_use() {
+    let mut prompt = anthropic_prompt_with_tools();
+    let block = json!({"type":"thinking","thinking":"considering","signature":"signed"});
+    prompt.input = vec![
+        ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![ContentItem::InputText {
+                text: "inspect".into(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::Reasoning {
+            id: None,
+            summary: vec![],
+            content: None,
+            encrypted_content: Some(format!(
+                "{}{}",
+                sofia_api::ANTHROPIC_THINKING_PREFIX,
+                json!([block])
+            )),
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::FunctionCall {
+            id: None,
+            name: "read".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            call_id: "call".into(),
+            encrypted_function_args: None,
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: Some("call".into()),
+            name: Some("read".into()),
+            namespace: None,
+            output: sofia_protocol::models::FunctionCallOutputPayload::from_text(
+                "file".to_string(),
+            ),
+            internal_chat_message_metadata_passthrough: None,
+        },
+    ];
+    let model = anthropic_model_info("claude-sonnet-4-6", /*reasoning*/ true);
+    let body = crate::client::build_anthropic_body(
+        &prompt,
+        &model,
+        &Some(sofia_protocol::openai_models::ReasoningEffort::Low),
+    )
+    .unwrap();
+    assert_eq!(body["messages"][1]["content"][0], block);
+    assert_eq!(body["messages"][1]["content"][1]["type"], "tool_use");
+    assert_eq!(body["thinking"], json!({"type":"adaptive"}));
+    assert_eq!(body["output_config"], json!({"effort":"low"}));
+}
+
+#[test]
+fn responses_request_does_not_forward_anthropic_thinking_as_openai_ciphertext() {
+    let client = test_model_client(SessionSource::Cli);
+    let model = test_model_info();
+    let prompt = Prompt {
+        input: vec![ResponseItem::Reasoning {
+            id: None,
+            summary: vec![],
+            content: None,
+            encrypted_content: Some(format!("{}[]", sofia_api::ANTHROPIC_THINKING_PREFIX)),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let request = client
+        .build_responses_request(
+            &prompt,
+            &model,
+            /*effort*/ None,
+            sofia_protocol::config_types::ReasoningSummary::None,
+            /*service_tier*/ None,
+            &test_responses_metadata_for_client(
+                &client,
+                /*turn_id*/ None,
+                format!("{}:0", client.state.thread_id),
+                /*parent_thread_id*/ None,
+                TestCodexResponsesRequestKind::Turn,
+            ),
+        )
+        .unwrap();
+    assert!(request.input.is_empty());
+}
+
+#[test]
+fn anthropic_output_limit_retry_does_not_intercept_context_or_thinking_errors() {
+    use crate::anthropic_request::anthropic_error_is_max_tokens;
+    assert!(anthropic_error_is_max_tokens(
+        "max_tokens: 32768 > 8192, maximum allowed number of output tokens"
+    ));
+    assert!(!anthropic_error_is_max_tokens(
+        "input tokens + max_tokens exceed the context window"
+    ));
+    assert!(!anthropic_error_is_max_tokens(
+        "budget_tokens must be less than max_tokens"
+    ));
+}

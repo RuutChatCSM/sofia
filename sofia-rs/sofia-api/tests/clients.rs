@@ -623,3 +623,44 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn anthropic_request_sends_version_and_automatic_cache_without_beta_header() {
+    let state = RecordingState::default();
+    let transport = RecordingTransport::new(state.clone());
+    let mut provider = provider("anthropic-gateway");
+    provider
+        .headers
+        .insert("x-api-key", HeaderValue::from_static("test-only-key"));
+    let client = sofia_api::AnthropicClient::new(transport, provider, Arc::new(NoAuth));
+    let body = serde_json::json!({"model":"claude-test","stream":true,"max_tokens":1024,"cache_control":{"type":"ephemeral"},"messages":[{"role":"user","content":"hello"}]});
+    let _stream = client
+        .stream(
+            body.clone(),
+            HeaderMap::new(),
+            Compression::None,
+            /*turn_state*/ None,
+            Arc::new(std::collections::HashSet::new()),
+        )
+        .await
+        .unwrap();
+    let requests = state.take_stream_requests();
+    assert_path_ends_with(&requests, "/v1/messages");
+    assert_eq!(
+        requests[0].headers.get("anthropic-version").unwrap(),
+        "2023-06-01"
+    );
+    assert_eq!(
+        requests[0].headers.get("x-api-key").unwrap(),
+        "test-only-key"
+    );
+    assert_eq!(
+        requests[0].headers.get(http::header::ACCEPT).unwrap(),
+        "text/event-stream"
+    );
+    assert!(!requests[0].headers.contains_key("anthropic-beta"));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(request_body_bytes(&requests[0])).unwrap(),
+        body
+    );
+}

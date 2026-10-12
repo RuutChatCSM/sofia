@@ -925,7 +925,7 @@ fn test_well_known_providers_have_unique_ids() {
 #[test]
 fn test_well_known_providers_responses_api_flag() {
     let providers = well_known_providers();
-    // Anthropic exposes Chat Completions compatibility, not /v1/responses.
+    // Anthropic speaks the native Messages API, not /v1/responses.
     let anthropic = providers
         .iter()
         .find(|p| p.provider_id == "anthropic")
@@ -966,13 +966,17 @@ fn test_discover_providers_from_env_with_key() {
 }
 
 #[test]
-fn test_discover_anthropic_uses_chat_completions() {
+fn test_discover_anthropic_uses_native_messages_api() {
     unsafe { std::env::set_var("ANTHROPIC_API_KEY", "test-key") };
     let providers = discover_providers_from_env();
     let anthropic = providers
         .get("anthropic")
         .expect("anthropic should be discovered");
-    assert_eq!(anthropic.wire_api, WireApi::ChatCompletions);
+    assert_eq!(anthropic.wire_api, WireApi::Anthropic);
+    assert_eq!(
+        anthropic.base_url.as_deref(),
+        Some("https://api.anthropic.com/v1")
+    );
     unsafe { std::env::remove_var("ANTHROPIC_API_KEY") };
 }
 

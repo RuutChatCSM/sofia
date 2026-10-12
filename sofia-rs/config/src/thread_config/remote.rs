@@ -307,6 +307,10 @@ fn proto_wire_api(wire_api: WireApi) -> proto::WireApi {
     match wire_api {
         WireApi::Responses => proto::WireApi::Responses,
         WireApi::ChatCompletions => proto::WireApi::ChatCompletions,
+        // The remote thread-config proto predates the native Anthropic wire and
+        // has no value for it. This encoder is test-only; map to the closest
+        // existing single-string-tool wire so the helper stays total.
+        WireApi::Anthropic => proto::WireApi::ChatCompletions,
     }
 }
 

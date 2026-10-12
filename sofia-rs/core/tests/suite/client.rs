@@ -3894,3 +3894,117 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
         "request 3 tail mismatch",
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn anthropic_native_tool_roundtrip_preserves_cache_and_signed_thinking() {
+    let server = MockServer::start().await;
+    let encode = |events: Vec<serde_json::Value>| {
+        events
+            .into_iter()
+            .map(|event| format!("data: {event}\n\n"))
+            .collect::<String>()
+    };
+    let first = encode(vec![
+        json!({"type":"message_start","message":{"id":"native-one","usage":{"input_tokens":3,"cache_read_input_tokens":100}}}),
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"inspect first"}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"native-signature"}}),
+        json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_native","name":"unsupported_tool","input":{}}}),
+        json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}),
+        json!({"type":"message_stop"}),
+    ]);
+    let second = encode(vec![
+        json!({"type":"message_start","message":{"id":"native-two","usage":{"input_tokens":1}}}),
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Finished"}}),
+        json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}),
+        json!({"type":"message_stop"}),
+    ]);
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(move |_request: &wiremock::Request| {
+            let count = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ResponseTemplate::new(200).set_body_raw(
+                if count == 0 {
+                    first.clone()
+                } else {
+                    second.clone()
+                },
+                "text/event-stream",
+            )
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    let provider = ModelProviderInfo {
+        name: "native-anthropic-test".into(),
+        base_url: Some(format!("{}/v1", server.uri())),
+        wire_api: WireApi::Anthropic,
+        requires_openai_auth: false,
+        http_headers: Some(std::collections::HashMap::from([(
+            "x-api-key".into(),
+            "test-only".into(),
+        )])),
+        ..ModelProviderInfo::default()
+    };
+    let sofia = test_codex()
+        .with_config(move |config| {
+            config.model_provider_id = provider.name.clone();
+            config.model_provider = provider;
+        })
+        .build_with_auto_env(&server)
+        .await
+        .unwrap()
+        .sofia;
+    sofia
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+            text: "Inspect".into(),
+            text_elements: vec![],
+        }]))
+        .await
+        .unwrap();
+    wait_for_event(&sofia, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+    let requests = server.received_requests().await.unwrap();
+    let messages: Vec<_> = requests
+        .iter()
+        .filter(|request| request.url.path() == "/v1/messages")
+        .collect();
+    assert_eq!(messages.len(), 2);
+    for request in &messages {
+        assert_eq!(
+            request
+                .headers
+                .get("anthropic-version")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "2023-06-01"
+        );
+        let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+        assert_eq!(body["cache_control"], json!({"type":"ephemeral"}));
+    }
+    let replay: serde_json::Value = serde_json::from_slice(&messages[1].body).unwrap();
+    let assistant = replay["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .unwrap();
+    assert_eq!(
+        assistant["content"][0],
+        json!({"type":"thinking","thinking":"inspect first","signature":"native-signature"})
+    );
+    assert_eq!(assistant["content"][1]["id"], "toolu_native");
+    assert!(
+        replay["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(
+                |message| message["content"].as_array().is_some_and(|blocks| blocks
+                    .iter()
+                    .any(|block| block["tool_use_id"] == "toolu_native"))
+            )
+    );
+}

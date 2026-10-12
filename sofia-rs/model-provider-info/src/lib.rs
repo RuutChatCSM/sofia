@@ -69,6 +69,11 @@ pub enum WireApi {
     /// `/v1/chat/completions`. Used for MiMo, OpenRouter, Groq, Together,
     /// and any other provider that speaks the OpenAI chat format.
     ChatCompletions,
+    /// The native Anthropic Messages API exposed at `/v1/messages`. Used for
+    /// Claude models so they get the real agent harness (freeform tools such as
+    /// `apply_patch`, tool use, thinking, and prompt caching) instead of
+    /// Anthropic's degraded OpenAI `/chat/completions` compatibility endpoint.
+    Anthropic,
 }
 
 impl fmt::Display for WireApi {
@@ -76,6 +81,7 @@ impl fmt::Display for WireApi {
         let value = match self {
             Self::Responses => "responses",
             Self::ChatCompletions => "chat_completions",
+            Self::Anthropic => "anthropic",
         };
         f.write_str(value)
     }
@@ -90,9 +96,17 @@ impl<'de> Deserialize<'de> for WireApi {
         match value.as_str() {
             "responses" => Ok(Self::Responses),
             "chat" | "chat_completions" | "chatcompletions" => Ok(Self::ChatCompletions),
+            "anthropic" | "anthropic_messages" => Ok(Self::Anthropic),
             _ => Err(serde::de::Error::unknown_variant(
                 &value,
-                &["responses", "chat", "chat_completions", "chatcompletions"],
+                &[
+                    "responses",
+                    "chat",
+                    "chat_completions",
+                    "chatcompletions",
+                    "anthropic",
+                    "anthropic_messages",
+                ],
             )),
         }
     }
@@ -670,7 +684,10 @@ pub fn well_known_providers() -> Vec<WellKnownProvider> {
             provider_id: "anthropic",
             provider_name: "Anthropic",
             base_url: "https://api.anthropic.com/v1",
-            wire_api: WireApi::ChatCompletions,
+            // Native Anthropic Messages API so Claude gets freeform tools,
+            // thinking, and prompt caching rather than the degraded
+            // OpenAI-compatible `/chat/completions` shim.
+            wire_api: WireApi::Anthropic,
             supports_responses_api: false,
         },
         WellKnownProvider {
@@ -801,55 +818,55 @@ pub fn discover_providers_from_env() -> HashMap<String, ModelProviderInfo> {
             .ok()
             .filter(|v| !v.trim().is_empty())
             .or_else(|| api_key_from_auth_file(wk.env_key));
-        if let Some(key) = key {
-            if !key.trim().is_empty() {
-                let wire_api = if wk.supports_responses_api {
-                    WireApi::Responses
-                } else {
-                    wk.wire_api
-                };
-                providers.insert(
-                    wk.provider_id.to_string(),
-                    ModelProviderInfo {
-                        name: wk.provider_name.to_string(),
-                        base_url: Some(wk.base_url.to_string()),
-                        env_key: Some(wk.env_key.to_string()),
-                        wire_api,
-                        ..ModelProviderInfo::default()
-                    },
-                );
-            }
+        if let Some(key) = key
+            && !key.trim().is_empty()
+        {
+            let wire_api = if wk.supports_responses_api {
+                WireApi::Responses
+            } else {
+                wk.wire_api
+            };
+            providers.insert(
+                wk.provider_id.to_string(),
+                ModelProviderInfo {
+                    name: wk.provider_name.to_string(),
+                    base_url: Some(wk.base_url.to_string()),
+                    env_key: Some(wk.env_key.to_string()),
+                    wire_api,
+                    ..ModelProviderInfo::default()
+                },
+            );
         }
     }
 
     // Generic OpenAI-compatible provider from env vars
-    if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
-        if !base_url.trim().is_empty() {
-            let api_key = std::env::var("OPENAI_API_KEY").ok();
-            let name =
-                std::env::var("OPENAI_PROVIDER_NAME").unwrap_or_else(|_| "custom".to_string());
-            let provider_id =
-                std::env::var("OPENAI_PROVIDER_ID").unwrap_or_else(|_| "custom".to_string());
-            let wire_api_str =
-                std::env::var("OPENAI_WIRE_API").unwrap_or_else(|_| "responses".to_string());
-            let wire_api = match wire_api_str.as_str() {
-                "chat" | "chat_completions" => WireApi::ChatCompletions,
-                _ => WireApi::Responses,
-            };
+    if let Ok(base_url) = std::env::var("OPENAI_BASE_URL")
+        && !base_url.trim().is_empty()
+    {
+        let api_key = std::env::var("OPENAI_API_KEY").ok();
+        let name = std::env::var("OPENAI_PROVIDER_NAME").unwrap_or_else(|_| "custom".to_string());
+        let provider_id =
+            std::env::var("OPENAI_PROVIDER_ID").unwrap_or_else(|_| "custom".to_string());
+        let wire_api_str =
+            std::env::var("OPENAI_WIRE_API").unwrap_or_else(|_| "responses".to_string());
+        let wire_api = match wire_api_str.as_str() {
+            "chat" | "chat_completions" => WireApi::ChatCompletions,
+            "anthropic" | "anthropic_messages" => WireApi::Anthropic,
+            _ => WireApi::Responses,
+        };
 
-            let mut info = ModelProviderInfo {
-                name,
-                base_url: Some(base_url),
-                wire_api,
-                ..ModelProviderInfo::default()
-            };
-            if let Some(key) = api_key {
-                if !key.trim().is_empty() {
-                    info.env_key = Some("OPENAI_API_KEY".to_string());
-                }
-            }
-            providers.insert(provider_id, info);
+        let mut info = ModelProviderInfo {
+            name,
+            base_url: Some(base_url),
+            wire_api,
+            ..ModelProviderInfo::default()
+        };
+        if let Some(key) = api_key
+            && !key.trim().is_empty()
+        {
+            info.env_key = Some("OPENAI_API_KEY".to_string());
         }
+        providers.insert(provider_id, info);
     }
 
     providers
@@ -868,7 +885,7 @@ pub fn create_custom_provider(
     ModelProviderInfo {
         name: name.to_string(),
         base_url: Some(base_url.to_string()),
-        env_key: env_key.map(|s| s.to_string()),
+        env_key: env_key.map(std::string::ToString::to_string),
         wire_api,
         ..ModelProviderInfo::default()
     }

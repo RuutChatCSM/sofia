@@ -684,7 +684,7 @@ fn namespace_tools_enabled(turn_context: &TurnContext) -> bool {
 fn wire_supports_tool_namespaces(turn_context: &TurnContext) -> bool {
     !matches!(
         turn_context.provider.info().wire_api,
-        WireApi::ChatCompletions
+        WireApi::ChatCompletions | WireApi::Anthropic
     )
 }
 

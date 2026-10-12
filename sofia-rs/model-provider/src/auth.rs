@@ -198,8 +198,8 @@ pub(crate) fn resolve_provider_auth(
     auth: Option<&CodexAuth>,
     provider: &ModelProviderInfo,
 ) -> sofia_protocol::error::Result<SharedAuthProvider> {
-    if let Some(auth) = bearer_auth_for_provider(provider)? {
-        return Ok(Arc::new(auth));
+    if let Some(auth) = provider_auth_for_api_key(provider)? {
+        return Ok(auth);
     }
 
     if !provider.requires_openai_auth && provider.auth.is_none() {
@@ -289,15 +289,51 @@ fn should_bootstrap_chatgpt_agent_identity(
         && matches!(auth, Some(CodexAuth::Chatgpt(_)))
 }
 
-fn bearer_auth_for_provider(
+const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+fn is_anthropic_provider(provider: &ModelProviderInfo) -> bool {
+    provider.wire_api == sofia_model_provider_info::WireApi::Anthropic
+}
+
+/// Anthropic's native Messages API authenticates with `x-api-key` and requires
+/// the `anthropic-version` header on every request — unlike the
+/// `Authorization: Bearer` scheme used by OpenAI-compatible providers.
+///
+/// This provider is selected by the native Anthropic wire protocol, including
+/// compatible gateways, so those
+/// requests send the header style Anthropic expects instead of a bearer token
+/// it would reject.
+#[derive(Clone)]
+struct AnthropicApiKeyAuthProvider {
+    api_key: String,
+}
+
+impl AuthProvider for AnthropicApiKeyAuthProvider {
+    fn add_auth_headers(&self, headers: &mut HeaderMap) {
+        if let Ok(header) = HeaderValue::from_str(&self.api_key) {
+            let _ = headers.insert("x-api-key", header);
+        }
+        let _ = headers.insert(
+            "anthropic-version",
+            HeaderValue::from_static(ANTHROPIC_API_VERSION),
+        );
+    }
+}
+
+/// Resolves the provider-scoped auth for an API-key or explicit bearer-token
+/// provider. Anthropic providers get [`AnthropicApiKeyAuthProvider`]; everything
+/// else keeps the bearer-token behaviour.
+fn provider_auth_for_api_key(
     provider: &ModelProviderInfo,
-) -> sofia_protocol::error::Result<Option<BearerAuthProvider>> {
+) -> sofia_protocol::error::Result<Option<SharedAuthProvider>> {
     if let Some(api_key) = provider.api_key()? {
-        return Ok(Some(BearerAuthProvider::new(api_key)));
+        if is_anthropic_provider(provider) {
+            return Ok(Some(Arc::new(AnthropicApiKeyAuthProvider { api_key })));
+        }
+        return Ok(Some(Arc::new(BearerAuthProvider::new(api_key))));
     }
 
     if let Some(token) = provider.experimental_bearer_token.clone() {
-        return Ok(Some(BearerAuthProvider::new(token.into_inner())));
+        return Ok(Some(Arc::new(BearerAuthProvider::new(token.into_inner()))));
     }
 
     Ok(None)
@@ -351,6 +387,7 @@ mod tests {
     use sofia_login::auth::BedrockApiKeyAuth;
     use sofia_login::auth::login_with_chatgpt_auth_tokens;
     use sofia_model_provider_info::WireApi;
+    use sofia_model_provider_info::create_custom_provider;
     use sofia_model_provider_info::create_oss_provider_with_base_url;
     use sofia_protocol::account::PlanType;
     use sofia_protocol::config_types::ModelProviderAuthInfo;
@@ -475,6 +512,43 @@ mod tests {
         let auth = resolve_provider_auth(/*auth*/ None, &provider).expect("auth should resolve");
 
         assert!(auth.to_auth_headers().is_empty());
+    }
+
+    #[test]
+    fn anthropic_api_key_provider_uses_x_api_key_and_version_header() {
+        let provider = AnthropicApiKeyAuthProvider {
+            api_key: "sk-ant-test".to_string(),
+        };
+
+        let headers = provider.to_auth_headers();
+
+        assert_eq!(
+            headers
+                .get("x-api-key")
+                .and_then(|value| value.to_str().ok()),
+            Some("sk-ant-test")
+        );
+        assert_eq!(
+            headers
+                .get("anthropic-version")
+                .and_then(|value| value.to_str().ok()),
+            Some(ANTHROPIC_API_VERSION)
+        );
+        assert!(headers.get(AUTHORIZATION).is_none());
+    }
+
+    #[test]
+    fn anthropic_provider_is_detected_by_wire_api() {
+        let anthropic = create_custom_provider(
+            "Anthropic",
+            "https://gateway.example/v1",
+            Some("ANTHROPIC_API_KEY"),
+            WireApi::Anthropic,
+        );
+        assert!(is_anthropic_provider(&anthropic));
+
+        let openai = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+        assert!(!is_anthropic_provider(&openai));
     }
 
     #[test]

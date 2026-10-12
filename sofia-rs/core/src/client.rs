@@ -23,6 +23,9 @@
 //! WebSocket prewarm is treated as the first websocket connection attempt for a turn. If it
 //! fails, normal stream retry/fallback logic handles recovery on the same turn.
 
+use crate::anthropic_request::anthropic_error_is_max_tokens;
+use crate::anthropic_request::anthropic_freeform_tool_names;
+use crate::anthropic_request::build_anthropic_body;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -31,7 +34,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 use async_channel::Sender;
+use sofia_api::ANTHROPIC_MESSAGES_PATH as ANTHROPIC_ENDPOINT;
 use sofia_api::AgentIdentityTelemetry;
+use sofia_api::AnthropicClient as ApiAnthropicClient;
 use sofia_api::ApiError;
 use sofia_api::AuthProvider;
 use sofia_api::CHAT_COMPLETIONS_PATH as CHAT_COMPLETIONS_ENDPOINT;
@@ -971,6 +976,8 @@ impl ModelClient {
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<ResponsesApiRequest> {
         let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        // Native Anthropic signatures are provider-specific, not Responses ciphertext.
+        input.retain(|item| !matches!(item, ResponseItem::Reasoning { encrypted_content: Some(value), .. } if value.starts_with(sofia_api::ANTHROPIC_THINKING_PREFIX)));
         let is_openai = self.state.provider().info().is_openai();
         let (instructions, tools) = if model_info.use_responses_lite {
             // These prompt-only items are rebuilt on every request. Hash their visible payloads
@@ -2165,6 +2172,24 @@ impl ModelClientSession {
                 )
                 .await
             }
+            WireApi::Anthropic => {
+                // Native Anthropic Messages adapter — sends requests to the
+                // provider's `/v1/messages` endpoint using the Anthropic wire
+                // format so Claude models get freeform tools, thinking, and
+                // prompt caching instead of the degraded OpenAI-compatible
+                // `/chat/completions` shim.
+                self.stream_anthropic_api(
+                    prompt,
+                    model_info,
+                    session_telemetry,
+                    effort,
+                    summary,
+                    service_tier,
+                    responses_metadata,
+                    inference_trace,
+                )
+                .await
+            }
         }
     }
 
@@ -2354,6 +2379,190 @@ impl ModelClientSession {
             // Translate the wire stream into the shared event pipeline, exactly
             // as the Responses path does, so downstream consumers see the same
             // event vocabulary on either wire API.
+            let (stream, _) = map_response_stream(
+                stream_response,
+                request_session_telemetry,
+                inference_trace_attempt,
+                self.client.state.provider(),
+            );
+            return Ok(stream);
+        }
+    }
+
+    /// Streams a turn via the native Anthropic Messages API (`/v1/messages`).
+    ///
+    /// Used for providers configured with `wire_api = "anthropic"` (the
+    /// well-known Anthropic provider). The request is translated from the
+    /// internal prompt format to the Messages API shape, and the streaming
+    /// response is translated back to the internal event stream. Sharing this
+    /// transport loop with the Responses and Chat Completions paths keeps auth
+    /// recovery, provider error mapping, telemetry, and inference tracing
+    /// identical across wire APIs.
+    #[allow(clippy::too_many_arguments)]
+    async fn stream_anthropic_api(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
+        _summary: ReasoningSummaryConfig,
+        _service_tier: Option<String>,
+        responses_metadata: &CodexResponsesMetadata,
+        inference_trace: &InferenceTraceContext,
+    ) -> Result<ResponseStream> {
+        info!(
+            model = %model_info.slug,
+            effort = ?effort,
+            tool_count = prompt.tools.len(),
+            input_items = prompt.input.len(),
+            "stream_anthropic_api: starting turn"
+        );
+
+        let mut request_body = build_anthropic_body(prompt, model_info, &effort)?;
+        let freeform_tool_names = Arc::new(anthropic_freeform_tool_names(prompt));
+        debug!(
+            body_size = serde_json::to_string(&request_body)
+                .map(|s| s.len())
+                .unwrap_or(0),
+            "stream_anthropic_api: request body built"
+        );
+
+        let auth_manager = self.client.state.provider().auth_manager();
+        let mut auth_recovery = auth_manager
+            .as_ref()
+            .map(AuthManager::unauthorized_recovery);
+        let mut provider_auth_recovery_attempted = false;
+        let mut pending_retry = PendingUnauthorizedRetry::default();
+        // Guards the one-shot `max_tokens` recovery below so a persistent 400
+        // cannot loop.
+        let mut max_tokens_recovery_used = false;
+        loop {
+            let client_setup = self.client.current_client_setup().await?;
+            let transport = self
+                .client
+                .build_api_transport(&client_setup.api_provider, ANTHROPIC_ENDPOINT)?;
+
+            let request_auth_context = AuthRequestTelemetryContext::new(
+                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.api_auth.as_ref(),
+                client_setup.agent_identity_telemetry.clone(),
+                pending_retry,
+            );
+            let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
+                session_telemetry,
+                request_auth_context,
+                RequestRouteTelemetry::for_endpoint(ANTHROPIC_ENDPOINT),
+                self.client.state.auth_env_telemetry.clone(),
+            );
+            let request_session_telemetry = session_telemetry_for_chat_request(
+                session_telemetry,
+                /*service_tier*/ None,
+                effort.as_ref(),
+            );
+            let inference_trace_attempt = inference_trace.start_attempt();
+
+            let client = ApiAnthropicClient::new(
+                transport,
+                client_setup.api_provider,
+                client_setup.api_auth,
+            )
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+
+            let stream_result = client
+                .stream(
+                    request_body.clone(),
+                    ApiHeaderMap::new(),
+                    Compression::None,
+                    None,
+                    Arc::clone(&freeform_tool_names),
+                )
+                .await;
+
+            let stream_response = match stream_result {
+                Ok(stream) => stream,
+                Err(err) => {
+                    // Recovery: Anthropic requires `max_tokens` and returns a 400
+                    // when it exceeds the model's output cap, which varies by
+                    // family. Retry once with a conservative cap rather than
+                    // failing the whole turn for a model we could not size.
+                    if status_of_api_error(&err) == Some(http::StatusCode::BAD_REQUEST)
+                        && !max_tokens_recovery_used
+                        && anthropic_error_is_max_tokens(&api_error_body(&err))
+                    {
+                        max_tokens_recovery_used = true;
+                        warn!("stream_anthropic_api: retrying with reduced max_tokens");
+                        request_body["max_tokens"] = serde_json::json!(8192);
+                        if let Some(budget) = request_body["thinking"]["budget_tokens"].as_u64() {
+                            request_body["thinking"]["budget_tokens"] =
+                                serde_json::json!(budget.min(8191));
+                        }
+                        continue;
+                    }
+                    // A 401 is recoverable by the provider's auth manager, which
+                    // can refresh the credential and retry the same turn.
+                    if let ApiError::Transport(unauthorized_transport) = err {
+                        if !self
+                            .client
+                            .state
+                            .provider()
+                            .is_recoverable_auth_error(&unauthorized_transport)
+                        {
+                            let response_debug_context =
+                                extract_response_debug_context(&unauthorized_transport);
+                            let err = self
+                                .client
+                                .state
+                                .provider()
+                                .map_api_error(ApiError::Transport(unauthorized_transport));
+                            inference_trace_attempt.record_failed(
+                                &err,
+                                response_debug_context.request_id.as_deref(),
+                                /*output_items*/ &[],
+                            );
+                            return Err(err);
+                        }
+                        let response_debug_context =
+                            extract_response_debug_context(&unauthorized_transport);
+                        inference_trace_attempt.record_failed(
+                            &unauthorized_transport,
+                            response_debug_context.request_id.as_deref(),
+                            /*output_items*/ &[],
+                        );
+                        pending_retry = PendingUnauthorizedRetry::from_recovery(
+                            handle_unauthorized(
+                                unauthorized_transport,
+                                &mut auth_recovery,
+                                &mut provider_auth_recovery_attempted,
+                                session_telemetry,
+                                &self.client.state.provider(),
+                                self.client.event_sender.as_ref(),
+                                responses_metadata.turn_id.as_deref(),
+                            )
+                            .await?,
+                        );
+                        continue;
+                    }
+                    if let Some(status) = status_of_api_error(&err)
+                        && log_chat_completions_request_body_for(status)
+                    {
+                        log_chat_completions_request_body(
+                            status,
+                            &api_error_body(&err),
+                            &request_body,
+                        );
+                    }
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let err = self.client.state.provider().map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    return Err(err);
+                }
+            };
+
             let (stream, _) = map_response_stream(
                 stream_response,
                 request_session_telemetry,
@@ -3033,7 +3242,7 @@ impl WebsocketTelemetry for ApiTelemetry {
 /// Strip Responses-API-only fields from a JSON Schema value recursively.
 /// Fields like `encrypted` are only valid in the Responses API and cause
 /// HTTP 400 errors with Chat Completions providers (e.g., MiMo).
-fn strip_responses_only_fields(value: &mut serde_json::Value) {
+pub(crate) fn strip_responses_only_fields(value: &mut serde_json::Value) {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
@@ -3766,6 +3975,12 @@ fn build_chat_completions_body(
     Ok(request)
 }
 
+// ---------------------------------------------------------------------------
+// Anthropic Messages adapter helpers
+// ---------------------------------------------------------------------------
+
+/// Flattened names of the freeform tools advertised by this request.
+///
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;

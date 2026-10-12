@@ -5829,6 +5829,13 @@
             "chatcompletions"
           ],
           "type": "string"
+        },
+        {
+          "description": "The native Anthropic Messages API exposed at `/v1/messages`. Used for Claude models so they get the real agent harness (freeform tools such as `apply_patch`, tool use, thinking, and prompt caching) instead of Anthropic's degraded OpenAI `/chat/completions` compatibility endpoint.",
+          "enum": [
+            "anthropic"
+          ],
+          "type": "string"
         }
       ]
     },
