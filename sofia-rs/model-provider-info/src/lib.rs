@@ -671,7 +671,7 @@ pub fn well_known_providers() -> Vec<WellKnownProvider> {
             provider_name: "Anthropic",
             base_url: "https://api.anthropic.com/v1",
             wire_api: WireApi::ChatCompletions,
-            supports_responses_api: true,
+            supports_responses_api: false,
         },
         WellKnownProvider {
             env_key: "OPENROUTER_API_KEY",

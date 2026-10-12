@@ -40,6 +40,9 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
         ApiError::Stream(msg) => CodexErr::Stream(msg),
         ApiError::ServerOverloaded => CodexErr::ServerOverloaded,
         ApiError::Api { status, message } => {
+            if is_context_window_overflow(status, &message) {
+                return CodexErr::ContextWindowExceeded;
+            }
             let user_message = api_error_user_message(status, &message);
             CodexErr::UnexpectedStatus(UnexpectedResponseError {
                 status,
@@ -71,6 +74,9 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                 body,
             } => {
                 let body_text = body.unwrap_or_default();
+                if is_context_window_overflow(status, &body_text) {
+                    return CodexErr::ContextWindowExceeded;
+                }
 
                 if status == http::StatusCode::SERVICE_UNAVAILABLE
                     && let Ok(value) = serde_json::from_str::<serde_json::Value>(&body_text)
@@ -267,4 +273,37 @@ struct UsageErrorBody {
     error_type: Option<String>,
     plan_type: Option<PlanType>,
     resets_at: Option<i64>,
+}
+
+/// Recognizes explicit provider input-window failures without treating arbitrary
+/// invalid requests or oversized uploads as recoverable context exhaustion.
+fn is_context_window_overflow(status: http::StatusCode, body: &str) -> bool {
+    if status != http::StatusCode::BAD_REQUEST {
+        return false;
+    }
+    let Ok(parsed) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let Some(error) = parsed.get("error") else {
+        return false;
+    };
+    if error.get("code").and_then(Value::as_str) == Some("context_length_exceeded") {
+        return true;
+    }
+    if error.get("type").and_then(Value::as_str) != Some("invalid_request_error") {
+        return false;
+    }
+    let Some(message) = error.get("message").and_then(Value::as_str) else {
+        return false;
+    };
+    let Some(counts) = message.strip_prefix("prompt is too long: ") else {
+        return false;
+    };
+    let Some((actual, maximum)) = counts.split_once(" tokens > ") else {
+        return false;
+    };
+    let Some(maximum) = maximum.strip_suffix(" maximum") else {
+        return false;
+    };
+    matches!((actual.parse::<u64>(), maximum.parse::<u64>()), (Ok(actual), Ok(maximum)) if maximum > 0 && actual > maximum)
 }

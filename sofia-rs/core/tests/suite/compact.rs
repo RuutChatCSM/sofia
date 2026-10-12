@@ -2152,13 +2152,16 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
     let previous_model = "gpt-5.4";
     let next_model = "gpt-5.2";
 
+    // Providers commonly expose only the context window, while a desktop
+    // session can still carry its previous model's larger global override.
+    let mut previous_info = model_info_with_context_window(previous_model, 273_000);
+    previous_info.max_context_window = None;
+    let mut next_info = model_info_with_context_window(next_model, 125_000);
+    next_info.max_context_window = None;
     let models_mock = mount_models_once(
         &server,
         ModelsResponse {
-            models: vec![
-                model_info_with_context_window(previous_model, /*context_window*/ 273_000),
-                model_info_with_context_window(next_model, /*context_window*/ 125_000),
-            ],
+            models: vec![previous_info, next_info],
         },
     )
     .await;
@@ -2188,6 +2191,7 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         .with_model(previous_model)
         .with_config(move |config| {
             config.update_plan_enabled = true;
+            config.model_context_window = Some(1_000_000);
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
         });
@@ -5502,4 +5506,177 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
     );
 
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pre_sampling_compact_uses_current_provider_model_when_prior_model_unavailable() {
+    skip_if_no_network!();
+
+    let server = MockServer::start().await;
+    let previous_model = "previous-provider-only-model";
+    let next_model = "gpt-5.2";
+
+    let mut next_info = model_info_with_context_window(next_model, 125_000);
+    next_info.max_context_window = None;
+    let models_mock = mount_models_once(
+        &server,
+        ModelsResponse {
+            models: vec![next_info],
+        },
+    )
+    .await;
+
+    let request_log = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_assistant_message("m1", "before switch"),
+                ev_completed_with_tokens("r1", /*total_tokens*/ 120_000),
+            ]),
+            sse(vec![
+                ev_assistant_message("m2", "PRE_SAMPLING_SUMMARY"),
+                ev_completed_with_tokens("r2", /*total_tokens*/ 10),
+            ]),
+            sse(vec![
+                ev_assistant_message("m3", "after switch"),
+                ev_completed_with_tokens("r3", /*total_tokens*/ 100),
+            ]),
+        ],
+    )
+    .await;
+
+    let model_provider = non_openai_model_provider(&server);
+    let mut builder = test_codex()
+        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_model(previous_model)
+        .with_config(move |config| {
+            config.update_plan_enabled = true;
+            config.model_context_window = Some(1_000_000);
+            config.model_provider = model_provider;
+            set_test_compact_prompt(config);
+        });
+    let test = builder.build(&server).await.expect("build test sofia");
+
+    test.sofia
+        .start_or_steer_turn(disabled_permission_user_turn(
+            "before switch",
+            test.cwd.path().to_path_buf(),
+            previous_model.to_string(),
+        ))
+        .await
+        .expect("submit first user turn");
+    wait_for_event(&test.sofia, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+
+    test.sofia
+        .start_or_steer_turn(disabled_permission_user_turn(
+            "after switch",
+            test.cwd.path().to_path_buf(),
+            next_model.to_string(),
+        ))
+        .await
+        .expect("submit second user turn");
+    assert_compaction_uses_turn_lifecycle_id(&test.sofia).await;
+
+    let requests = request_log.requests();
+    assert_eq!(models_mock.requests().len(), 1);
+    assert_eq!(
+        requests.len(),
+        3,
+        "expected user, compact, and follow-up requests"
+    );
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| request.body_json()["model"].as_str().map(str::to_string))
+            .collect::<Vec<_>>(),
+        vec![
+            Some(previous_model.to_string()),
+            Some(next_model.to_string()),
+            Some(next_model.to_string())
+        ],
+    );
+    assert!(body_contains_text(
+        &requests[1].body_json().to_string(),
+        SUMMARIZATION_PROMPT
+    ));
+    assert!(body_contains_text(
+        &requests[2].body_json().to_string(),
+        "PRE_SAMPLING_SUMMARY"
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sampling_context_overflow_compacts_then_retries_the_turn_once() {
+    skip_if_no_network!();
+    for repeat_overflow in [false, true] {
+        let server = start_mock_server().await;
+        let request_log = mount_sse_sequence(
+            &server,
+            vec![
+                sse_failed(
+                    "oversized-turn",
+                    "context_length_exceeded",
+                    CONTEXT_LIMIT_MESSAGE,
+                ),
+                sse(vec![
+                    ev_assistant_message("summary", SUMMARY_TEXT),
+                    ev_completed("compact"),
+                ]),
+                if repeat_overflow {
+                    sse_failed(
+                        "still-oversized",
+                        "context_length_exceeded",
+                        CONTEXT_LIMIT_MESSAGE,
+                    )
+                } else {
+                    sse(vec![
+                        ev_assistant_message("final", FINAL_REPLY),
+                        ev_completed("retried-turn"),
+                    ])
+                },
+            ],
+        )
+        .await;
+        let model_provider = non_openai_model_provider(&server);
+        let mut builder = test_codex().with_config(move |config| {
+            config.model_provider = model_provider;
+            set_test_compact_prompt(config);
+        });
+        let test = builder.build(&server).await.unwrap();
+        test.sofia
+            .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+                text: "LATEST_USER_TASK".to_string(),
+                text_elements: Vec::new(),
+            }]))
+            .await
+            .unwrap();
+        wait_for_event(&test.sofia, |event| {
+            matches!(event, EventMsg::ContextCompacted(_))
+        })
+        .await;
+        if repeat_overflow {
+            wait_for_event(&test.sofia, |event| matches!(event, EventMsg::Error(_))).await;
+        }
+        wait_for_event(&test.sofia, |event| {
+            matches!(event, EventMsg::TurnComplete(_))
+        })
+        .await;
+        let requests = request_log.requests();
+        assert_eq!(requests.len(), 3);
+        assert!(body_contains_text(
+            &requests[1].body_json().to_string(),
+            SUMMARIZATION_PROMPT
+        ));
+        assert!(body_contains_text(
+            &requests[2].body_json().to_string(),
+            SUMMARY_TEXT
+        ));
+        assert!(body_contains_text(
+            &requests[2].body_json().to_string(),
+            "LATEST_USER_TASK"
+        ));
+    }
 }

@@ -57,6 +57,7 @@ use sofia_protocol::error::Result as CodexResult;
 use sofia_protocol::mcp::ClientMcpExtensions;
 use sofia_protocol::mcp::OPENAI_STANDARD_FORM_INPUT_EXTENSION_ID;
 use sofia_protocol::openai_models::ModelPreset;
+use sofia_protocol::openai_models::ModelsResponse;
 use sofia_protocol::protocol::Event;
 use sofia_protocol::protocol::EventMsg;
 use sofia_protocol::protocol::InternalSessionSource;
@@ -354,6 +355,15 @@ pub(crate) struct ThreadManagerState {
     thread_id_generator: ThreadIdGenerator,
     auth_manager: Arc<AuthManager>,
     models_manager: SharedModelsManager,
+    /// Provider configuration the shared `models_manager` was built for.
+    ///
+    /// A session whose own config matches can reuse this manager, so catalog
+    /// refreshes that go through `get_models_manager` (the app-server refresh
+    /// worker, the model-list APIs) are visible to live sessions instead of
+    /// only updating a private copy.
+    models_manager_provider: ModelProviderInfo,
+    /// Static catalog override the shared `models_manager` was built with, if any.
+    models_manager_catalog: Option<ModelsResponse>,
     git_root_discovery: Arc<GitRootDiscovery>,
     environment_manager: Arc<EnvironmentManager>,
     starting_mcp_runtimes: std::sync::Mutex<Vec<std::sync::Weak<AtomicBool>>>,
@@ -489,6 +499,8 @@ impl ThreadManager {
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
                 models_manager,
+                models_manager_provider: config.model_provider.clone(),
+                models_manager_catalog: config.model_catalog.clone(),
                 git_root_discovery: Arc::default(),
                 environment_manager,
                 starting_mcp_runtimes: std::sync::Mutex::new(Vec::new()),
@@ -636,6 +648,8 @@ impl ThreadManager {
                 threads: Arc::new(RwLock::new(HashMap::new())),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
+                models_manager_provider: provider.clone(),
+                models_manager_catalog: None,
                 models_manager: create_model_provider(provider, Some(auth_manager.clone()))
                     .models_manager(sofia_home, /*config_model_catalog*/ None),
                 git_root_discovery: Arc::default(),
@@ -2055,12 +2069,21 @@ impl ThreadManagerState {
             starting.retain(|runtime| runtime.strong_count() != 0);
             starting.push(Arc::downgrade(&source_changed_during_startup));
         }
-        // Use a model manager built from the session's own config so it resolves
-        // model metadata against the session's active provider (e.g. a provider
-        // configured via `/connect`). The process-wide manager is built once at
-        // startup from the default provider and would otherwise miss
-        // custom-provider models such as `mimo-v2.5`.
-        let session_models_manager = build_models_manager(&config, Arc::clone(&auth_manager));
+        // Reuse the thread manager's model manager when this session resolves
+        // against the same provider and catalog it was built for, so catalog
+        // refreshes through `get_models_manager` (the app-server refresh worker,
+        // the model-list APIs) are visible to live sessions. A session on a
+        // different provider — or with a different static catalog — builds its
+        // own manager so metadata still resolves against the session's active
+        // provider; a later provider switch is handled by the session's own
+        // catalog swap.
+        let session_models_manager = if config.model_provider == self.models_manager_provider
+            && config.model_catalog == self.models_manager_catalog
+        {
+            Arc::clone(&self.models_manager)
+        } else {
+            build_models_manager(&config, Arc::clone(&auth_manager))
+        };
         let windows_sandbox_proxy_settings_mode = if matches!(
             &session_source,
             SessionSource::Internal(InternalSessionSource::Guardian)

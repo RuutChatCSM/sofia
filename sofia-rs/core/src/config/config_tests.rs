@@ -9506,7 +9506,64 @@ async fn model_catalog_json_loads_from_path() -> std::io::Result<()> {
     )
     .await?;
 
-    assert_eq!(config.model_catalog, Some(catalog));
+    // A custom catalog is additive: the caller's model takes precedence and the
+    // bundled entries survive, so adding one unknown model cannot strip the
+    // metadata every known model ships with.
+    let bundled = bundled_models_response().expect("bundled models.json should parse");
+    let merged = config.model_catalog.expect("a custom catalog should load");
+    assert_eq!(
+        merged.models.first().map(|model| model.slug.as_str()),
+        catalog.models.first().map(|model| model.slug.as_str())
+    );
+    assert_eq!(merged.models.len(), bundled.models.len());
+    Ok(())
+}
+
+#[tokio::test]
+async fn model_catalog_json_overrides_bundled_entries_by_slug() -> std::io::Result<()> {
+    let sofia_home = TempDir::new()?;
+    let catalog_path = sofia_home.path().join("override.json");
+
+    let mut bundled = bundled_models_response().expect("bundled models.json should parse");
+    let mut overridden = bundled
+        .models
+        .first()
+        .cloned()
+        .expect("the bundled catalog should not be empty");
+    overridden.context_window = Some(1_234_567);
+    bundled.models = vec![overridden.clone()];
+    std::fs::write(
+        &catalog_path,
+        serde_json::to_string(&bundled).expect("serialize catalog"),
+    )?;
+
+    let cfg = ConfigToml {
+        model_catalog_json: Some(catalog_path.abs()),
+        ..Default::default()
+    };
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        sofia_home.abs(),
+    )
+    .await?;
+
+    let merged = config.model_catalog.expect("catalog should load");
+    let entry = merged
+        .models
+        .iter()
+        .find(|model| model.slug == overridden.slug)
+        .expect("the overriding model should survive");
+    assert_eq!(entry.context_window, Some(1_234_567));
+    assert_eq!(
+        merged
+            .models
+            .iter()
+            .filter(|model| model.slug == overridden.slug)
+            .count(),
+        1,
+        "a custom entry must not be duplicated by the bundled copy"
+    );
     Ok(())
 }
 
@@ -12880,7 +12937,16 @@ sandbox_private_desktop = false
 
     assert_eq!(config.sqlite.home(), required_sqlite_home.as_path());
     assert_eq!(config.log_dir, required_log_dir);
-    assert_eq!(config.model_catalog, Some(catalog));
+    // A custom catalog is additive: the caller's model takes precedence and the
+    // bundled entries survive, so adding one unknown model cannot strip the
+    // metadata every known model ships with.
+    let bundled = bundled_models_response().expect("bundled models.json should parse");
+    let merged = config.model_catalog.expect("a custom catalog should load");
+    assert_eq!(
+        merged.models.first().map(|model| model.slug.as_str()),
+        catalog.models.first().map(|model| model.slug.as_str())
+    );
+    assert_eq!(merged.models.len(), bundled.models.len());
     assert!(!config.check_for_update_on_startup);
     assert!(!config.permissions.allow_login_shell);
     assert!(!config.feedback_enabled);

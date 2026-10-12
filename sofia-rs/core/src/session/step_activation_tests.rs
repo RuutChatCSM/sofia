@@ -173,7 +173,7 @@ async fn activation_fixture(models: Vec<ModelInfo>) -> ActivationFixture {
     let mut session = Arc::new(session);
     let mutable = Arc::get_mut(&mut session).expect("unshared test session");
     let (models, lookup) = GatedModelsManager::new(models);
-    mutable.services.models_manager = models;
+    mutable.replace_models_manager(models);
     for feature in [
         Feature::StepModelSwitching,
         Feature::FastMode,

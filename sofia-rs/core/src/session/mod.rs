@@ -126,6 +126,7 @@ use sofia_protocol::models::PermissionProfile;
 use sofia_protocol::models::SandboxEnforcement;
 use sofia_protocol::openai_models::ModelInfo;
 use sofia_protocol::openai_models::ModelPreset;
+use sofia_protocol::openai_models::ModelsResponse;
 use sofia_protocol::permissions::FileSystemSandboxPolicy;
 use sofia_protocol::permissions::FileSystemSandboxPolicyContext;
 use sofia_protocol::permissions::NetworkSandboxPolicy;
@@ -282,6 +283,7 @@ mod rollout_reconstruction_tests;
 /// `realtime_active -> false` transition.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PreviousTurnSettings {
+    pub(crate) model_provider_id: Option<String>,
     pub(crate) model: String,
     pub(crate) comp_hash: Option<String>,
     pub(crate) realtime_active: Option<bool>,
@@ -519,6 +521,28 @@ impl Session {
             .instrument(thread_spawn_span)
             .await
         })
+    }
+
+    /// The models manager for the session's currently active provider.
+    ///
+    /// Held behind an [`arc_swap::ArcSwap`] because `thread/settings/update` can
+    /// swap the provider on a live session, and model metadata has to come from
+    /// the same provider as the request. Returns an owned snapshot, so a caller
+    /// keeps the catalog it started with even if a switch lands mid-call.
+    pub(crate) fn models_manager(&self) -> SharedModelsManager {
+        Arc::clone(&self.services.models_manager.load_full())
+    }
+
+    /// Installs the catalog for the session's new active provider.
+    ///
+    /// The incoming manager starts from its own provider's state and never
+    /// inherits the outgoing provider's models, so a provider without a
+    /// reachable catalog resolves fallback metadata rather than silently
+    /// reusing another provider's models.
+    pub(crate) fn replace_models_manager(&self, models_manager: SharedModelsManager) {
+        self.services
+            .models_manager
+            .swap(std::sync::Arc::new(models_manager));
     }
 
     async fn spawn_internal(args: SessionSpawnArgs) -> CodexResult<(Arc<Self>, SessionIo)> {
@@ -796,7 +820,7 @@ impl Session {
             user_instructions,
             installation_id,
             auth_manager.clone(),
-            models_manager.clone(),
+            models_manager,
             git_root_discovery,
             model_info,
             exec_policy,
@@ -1060,6 +1084,28 @@ async fn thread_title_from_thread_store(
 
     let title = thread.name.as_deref()?.trim();
     (!title.is_empty() && thread.preview.trim() != title).then(|| title.to_string())
+}
+
+/// Whether a provider swap must also rebuild the provider's model catalog.
+///
+/// Rebuilds when the provider identity changes, and also when the provider is the
+/// same but the configuration that shapes its catalog changed: the base URL the
+/// catalog is fetched from, or an explicit model catalog. Plain model/effort
+/// switches within one provider keep the existing catalog, which is the common
+/// case and should not cost a refetch.
+fn provider_configuration_changed(
+    current_provider_id: &str,
+    current_base_url: &Option<String>,
+    current_model_catalog: Option<&ModelsResponse>,
+    next: &Config,
+) -> bool {
+    if next.model_provider_id != current_provider_id {
+        return true;
+    }
+    if next.model_provider.base_url != *current_base_url {
+        return true;
+    }
+    next.model_catalog.as_ref() != current_model_catalog
 }
 
 impl Session {
@@ -1892,6 +1938,12 @@ impl Session {
             let previous_config = notify_config_contributors
                 .then(|| self.build_effective_session_config(&state.session_configuration));
             let mut config = (*state.session_configuration.original_config_do_not_use).clone();
+            // Snapshot the outgoing provider before `config` below overwrites it
+            // with `next_config`'s values; the rebuild decision compares against
+            // what this session was actually using.
+            let previous_provider_id = config.model_provider_id.clone();
+            let previous_provider_base_url = config.model_provider.base_url.clone();
+            let previous_model_catalog = config.model_catalog.clone();
             config.active_project = next_config.active_project.clone();
             config.config_layer_stack = config
                 .config_layer_stack
@@ -1919,18 +1971,18 @@ impl Session {
                 warn!("failed to refresh MCP OAuth coordination config: {err}");
             }
             let config = Arc::new(config);
-            let previous_provider_id = state
-                .session_configuration
-                .original_config_do_not_use
-                .model_provider_id
-                .clone();
             state.session_configuration.original_config_do_not_use = Arc::clone(&config);
             // A config change may switch providers (e.g. the user selected
             // another provider's model). Rebuild the provider and swap it into
             // the model client so the live session keeps working without being
             // torn down and recreated. `config` above does not re-resolve
             // `model_provider_id`, so use the freshly-loaded `next_config`.
-            if next_config.model_provider_id != previous_provider_id {
+            if provider_configuration_changed(
+                &previous_provider_id,
+                &previous_provider_base_url,
+                previous_model_catalog.as_ref(),
+                &next_config,
+            ) {
                 let provider = create_model_provider(
                     next_config.model_provider.clone(),
                     Some(Arc::clone(&self.services.auth_manager)),
@@ -1938,7 +1990,36 @@ impl Session {
                 self.services
                     .model_client
                     .set_provider(Arc::clone(&provider));
+                // Build the destination catalog before `provider` is moved into
+                // the session configuration below.
+                let destination_models_manager = provider.models_manager(
+                    next_config.sofia_home.to_path_buf(),
+                    next_config.model_catalog.clone(),
+                );
                 state.session_configuration.provider = provider;
+                // The catalog is provider-owned: it is fetched from the active
+                // provider's `/models` and is keyed by that provider on disk.
+                // Swapping the provider alone left the previous provider's
+                // catalog in place, so every later turn resolved model metadata
+                // — and therefore the entire tool plan, including web search —
+                // against the provider the user just navigated away from.
+                //
+                // The replacement starts empty, so it must be populated before
+                // the next turn resolves anything from it — otherwise every
+                // destination model would fall back to default metadata and
+                // rebuild its tool plan from those defaults. Populate from the
+                // destination provider only: an unreachable catalog degrades to
+                // fallback metadata rather than inheriting the outgoing
+                // provider's models. A refresh failure is deliberately not fatal;
+                // the manager logs it and the existing fallback-metadata warning
+                // surfaces the degraded state to the user.
+                let _ = destination_models_manager
+                    .list_models(
+                        RefreshStrategy::OnlineIfUncached,
+                        next_config.http_client_factory(),
+                    )
+                    .await;
+                self.replace_models_manager(destination_models_manager);
             }
             self.mark_mcp_runtime_dirty();
             let new_config = notify_config_contributors

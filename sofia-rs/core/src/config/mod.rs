@@ -2094,9 +2094,38 @@ fn load_catalog_json(path: &AbsolutePathBuf) -> std::io::Result<ModelsResponse> 
 fn load_model_catalog(
     model_catalog_json: Option<AbsolutePathBuf>,
 ) -> std::io::Result<Option<ModelsResponse>> {
-    model_catalog_json
-        .map(|path| load_catalog_json(&path))
-        .transpose()
+    let Some(path) = model_catalog_json else {
+        return Ok(None);
+    };
+    Ok(Some(merge_with_bundled_catalog(load_catalog_json(&path)?)))
+}
+
+/// Merge a caller-supplied catalog over the bundled one.
+///
+/// `model_catalog_json` exists so a client can describe models the vendored
+/// catalog has never heard of (BYOK / models.dev providers). It used to replace
+/// the bundled catalog outright, which meant adding one unknown model silently
+/// dropped the richer metadata every known model ships with — reasoning presets,
+/// guardian policy, instruction templates. Custom entries win on slug
+/// collisions; everything else from the bundle is preserved.
+fn merge_with_bundled_catalog(custom: ModelsResponse) -> ModelsResponse {
+    let Ok(bundled) = sofia_models_manager::bundled_models_response() else {
+        return custom;
+    };
+
+    let custom_slugs: HashSet<String> = custom
+        .models
+        .iter()
+        .map(|model| model.slug.clone())
+        .collect();
+    let mut models = custom.models;
+    models.extend(
+        bundled
+            .models
+            .into_iter()
+            .filter(|model| !custom_slugs.contains(&model.slug)),
+    );
+    ModelsResponse { models }
 }
 
 fn filter_mcp_servers_by_requirements(

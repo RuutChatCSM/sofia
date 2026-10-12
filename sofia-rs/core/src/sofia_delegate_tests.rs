@@ -196,7 +196,7 @@ async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
         run_codex_thread_interactive(
             config,
             Arc::clone(&parent_session.services.auth_manager),
-            Arc::clone(&parent_session.services.models_manager),
+            Arc::clone(&parent_session.models_manager()),
             parent_session,
             parent_ctx,
             parent_environments,
@@ -242,7 +242,7 @@ async fn guardian_delegates_do_not_inherit_parent_extensions() {
         let (session, io) = run_codex_thread_interactive(
             config,
             Arc::clone(&parent_session.services.auth_manager),
-            Arc::clone(&parent_session.services.models_manager),
+            Arc::clone(&parent_session.models_manager()),
             Arc::clone(&parent_session),
             Arc::clone(&parent_ctx),
             parent_ctx.environments.clone(),
@@ -285,7 +285,7 @@ async fn run_codex_thread_interactive_rejects_approval_policy_that_can_prompt() 
     let result = run_codex_thread_interactive(
         config,
         Arc::clone(&parent_session.services.auth_manager),
-        Arc::clone(&parent_session.services.models_manager),
+        Arc::clone(&parent_session.models_manager()),
         parent_session,
         parent_ctx,
         parent_environments,

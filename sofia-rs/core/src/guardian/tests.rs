@@ -279,8 +279,7 @@ async fn guardian_test_session_turn_and_rx(
     );
     Arc::get_mut(&mut session)
         .expect("session should be uniquely owned")
-        .services
-        .models_manager = models_manager;
+        .replace_models_manager(models_manager);
     let turn_mut = Arc::get_mut(&mut turn).expect("turn should be uniquely owned");
     turn_mut.config = Arc::clone(&config);
     turn_mut.provider =
@@ -348,7 +347,7 @@ async fn guardian_test_session_and_turn_with_base_url(
         Arc::clone(&session.services.auth_manager),
         config.model_provider.clone(),
     );
-    session.services.models_manager = models_manager;
+    session.replace_models_manager(models_manager);
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
 
@@ -1996,8 +1995,7 @@ async fn guardian_request_model_for_auto_review(
             );
             Arc::get_mut(&mut session)
                 .expect("session should be unique")
-                .services
-                .models_manager = Arc::new(models_manager);
+                .replace_models_manager(Arc::new(models_manager));
         }
     }
     update_turn_settings_for_test(
@@ -2212,7 +2210,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
         Arc::clone(&session.services.auth_manager),
         config.model_provider.clone(),
     );
-    session.services.models_manager = models_manager;
+    session.replace_models_manager(models_manager);
     let memory_extension = Arc::new(GuardianMemoryContextProbe);
     let mut extensions = sofia_extension_api::ExtensionRegistryBuilder::<Config>::new();
     extensions.thread_lifecycle_contributor(memory_extension.clone());
@@ -3015,8 +3013,7 @@ async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> 
     );
     Arc::get_mut(&mut session)
         .expect("session should be uniquely owned")
-        .services
-        .models_manager = models_manager;
+        .replace_models_manager(models_manager);
     let turn_mut = Arc::get_mut(&mut turn).expect("turn should be uniquely owned");
     turn_mut.config = Arc::clone(&config);
     turn_mut.provider =
@@ -3798,13 +3795,12 @@ async fn guardian_review_session_config_preserves_context_overrides_for_same_eff
     let auth_manager = Arc::clone(&session.services.auth_manager);
     Arc::get_mut(&mut session)
         .expect("session should be unique")
-        .services
-        .models_manager = Arc::new(StaticModelsManager::new(
-        Some(auth_manager),
-        ModelsResponse {
-            models: vec![parent_model],
-        },
-    ));
+        .replace_models_manager(Arc::new(StaticModelsManager::new(
+            Some(auth_manager),
+            ModelsResponse {
+                models: vec![parent_model],
+            },
+        )));
     let mut config = (*turn.config).clone();
     config.model = Some("stale-parent-model".to_string());
     config.model_context_window = Some(128_000);

@@ -64,7 +64,11 @@ pub(crate) struct SessionServices {
     pub(crate) auth_manager: Arc<AuthManager>,
     /// Upload-only clients shared across turns without logging signed blob URLs.
     pub(crate) openai_file_upload_client_pool: RouteAwareClientPool,
-    pub(crate) models_manager: SharedModelsManager,
+    /// Swappable so a provider switch can install the destination provider's
+    /// catalog. A stale catalog would resolve model metadata — and so the entire
+    /// tool plan, including web search — against the provider the user just
+    /// navigated away from.
+    pub(crate) models_manager: arc_swap::ArcSwap<SharedModelsManager>,
     pub(crate) git_root_discovery: Arc<GitRootDiscovery>,
     pub(crate) session_telemetry: SessionTelemetry,
     pub(crate) tool_approvals: Mutex<ApprovalStore>,

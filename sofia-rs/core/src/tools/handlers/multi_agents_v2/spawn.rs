@@ -182,8 +182,7 @@ async fn handle_spawn_agent(
             let child_model_info = match config.model.as_deref() {
                 Some(model) if model != turn.model_info().slug => Some(
                     session
-                        .services
-                        .models_manager
+                        .models_manager()
                         .get_model_info(model, &config.to_models_manager_config())
                         .await,
                 ),

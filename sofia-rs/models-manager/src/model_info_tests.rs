@@ -2,6 +2,7 @@ use super::*;
 use crate::ModelsManagerConfig;
 use pretty_assertions::assert_eq;
 use sofia_protocol::config_types::Personality;
+use sofia_protocol::openai_models::ApplyPatchToolType;
 use sofia_protocol::openai_models::ApprovalMessages;
 use sofia_protocol::openai_models::AutoReviewMessages;
 use sofia_protocol::openai_models::CollaborationModeMessages;
@@ -324,6 +325,22 @@ fn unknown_model_uses_builtin_instruction_template() {
 }
 
 #[test]
+fn unknown_model_can_still_apply_patches() {
+    // Regression: the fallback withheld `apply_patch`, so every BYOK / models.dev
+    // model (anything the vendored catalog does not list) silently lost file
+    // editing and had to rewrite files through the shell. Unknown means
+    // "unverified", not "incapable" — the flag below keeps the safety gates
+    // treating it as unverified.
+    let model = model_info_from_slug("unknown-model");
+
+    assert_eq!(
+        model.apply_patch_tool_type,
+        Some(ApplyPatchToolType::Freeform)
+    );
+    assert!(model.used_fallback_model_metadata);
+}
+
+#[test]
 fn model_context_window_override_clamps_to_max_context_window() {
     let mut model = model_info_from_slug("unknown-model");
     model.context_window = Some(273_000);
@@ -350,4 +367,25 @@ fn model_context_window_uses_model_value_without_override() {
     let updated = with_config_overrides(model.clone(), &config);
 
     assert_eq!(updated, model);
+}
+
+#[test]
+fn model_context_window_override_respects_provider_window_without_separate_maximum() {
+    for requested_window in [1_000_000, 128_000] {
+        let mut model = model_info_from_slug("provider-model");
+        model.context_window = Some(200_000);
+        model.max_context_window = None;
+        let config = ModelsManagerConfig {
+            model_context_window: Some(requested_window),
+            ..Default::default()
+        };
+        let updated = with_config_overrides(model.clone(), &config);
+        let mut expected = model;
+        expected.context_window = Some(requested_window.min(200_000));
+        assert_eq!(updated, expected);
+        assert_eq!(
+            updated.auto_compact_token_limit(),
+            Some(requested_window.min(200_000) * 9 / 10)
+        );
+    }
 }

@@ -239,6 +239,7 @@ async fn record_initial_history_restores_world_state_baseline(input: BaselineTur
         ),
         (
             Some(PreviousTurnSettings {
+                model_provider_id: None,
                 model: context_item.model.clone(),
                 comp_hash: context_item.comp_hash.clone(),
                 realtime_active: context_item.realtime_active,
@@ -390,6 +391,7 @@ async fn record_initial_history_resumed_hydrates_previous_turn_settings_from_lif
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: Some("comp-hash-a".to_string()),
             realtime_active: Some(turn_context.realtime_active),
@@ -506,6 +508,7 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_com
     assert_eq!(
         reconstructed.previous_turn_settings,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -607,6 +610,7 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_inc
     assert_eq!(
         reconstructed.previous_turn_settings,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -744,6 +748,7 @@ async fn reconstruct_history_rollback_skips_non_user_turns_for_history_and_metad
     assert_eq!(
         reconstructed.previous_turn_settings,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -849,6 +854,7 @@ async fn reconstruct_history_rollback_counts_inter_agent_assistant_turns() {
     assert_eq!(
         reconstructed.previous_turn_settings,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -1087,6 +1093,7 @@ async fn record_initial_history_resumed_rollback_drops_incomplete_user_turn_comp
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -1684,6 +1691,7 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -1845,6 +1853,7 @@ async fn record_initial_history_resumed_aborted_turn_without_id_clears_active_tu
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -1977,6 +1986,7 @@ async fn record_initial_history_resumed_unmatched_abort_preserves_active_turn_fo
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: current_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -2104,6 +2114,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_compaction_clea
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -2155,6 +2166,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_preserves_turn_
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: turn_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -2294,6 +2306,7 @@ async fn record_initial_history_resumed_replaced_incomplete_compacted_turn_clear
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),

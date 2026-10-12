@@ -83,3 +83,7 @@ fn communication_from_tool_message(
         InterAgentMessage::new(message_type, recipient.clone(), author.clone(), message).render();
     InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn)
 }
+
+#[cfg(test)]
+#[path = "multi_agents_v2_message_tests.rs"]
+mod message_tests;

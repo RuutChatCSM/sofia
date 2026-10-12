@@ -787,7 +787,6 @@ fn test_api_key_continues_past_missing_candidate_homes() {
     // Point `$SOFIA_HOME` at a directory that does *not* contain sofia-auth.json,
     // but place the file under `~/.sofia`. The lookup must continue past the
     // missing `$SOFIA_HOME` candidate and find it under `~/.sofia`.
-    let sofia_home = tempdir().unwrap();
     let real_home = tempdir().unwrap();
     let sofia_home = real_home.path().join(".sofia");
     std::fs::create_dir_all(&sofia_home).unwrap();
@@ -819,7 +818,7 @@ fn test_api_key_continues_past_missing_candidate_homes() {
     let previous_home = std::env::var_os("SOFIA_HOME");
     let previous_user_home = std::env::var_os("HOME");
     unsafe {
-        std::env::set_var("SOFIA_HOME", sofia_home.path());
+        std::env::set_var("SOFIA_HOME", sofia_home.as_path());
         std::env::set_var("HOME", real_home.path());
     }
 
@@ -926,12 +925,12 @@ fn test_well_known_providers_have_unique_ids() {
 #[test]
 fn test_well_known_providers_responses_api_flag() {
     let providers = well_known_providers();
-    // Anthropic and OpenRouter should support Responses API
+    // Anthropic exposes Chat Completions compatibility, not /v1/responses.
     let anthropic = providers
         .iter()
         .find(|p| p.provider_id == "anthropic")
         .unwrap();
-    assert!(anthropic.supports_responses_api);
+    assert!(!anthropic.supports_responses_api);
     let openrouter = providers
         .iter()
         .find(|p| p.provider_id == "openrouter")
@@ -967,14 +966,13 @@ fn test_discover_providers_from_env_with_key() {
 }
 
 #[test]
-fn test_discover_providers_prefers_responses_api() {
-    // Anthropic supports Responses API — should be preferred
+fn test_discover_anthropic_uses_chat_completions() {
     unsafe { std::env::set_var("ANTHROPIC_API_KEY", "test-key") };
     let providers = discover_providers_from_env();
     let anthropic = providers
         .get("anthropic")
         .expect("anthropic should be discovered");
-    assert_eq!(anthropic.wire_api, WireApi::Responses);
+    assert_eq!(anthropic.wire_api, WireApi::ChatCompletions);
     unsafe { std::env::remove_var("ANTHROPIC_API_KEY") };
 }
 

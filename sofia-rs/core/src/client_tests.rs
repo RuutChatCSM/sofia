@@ -2440,9 +2440,16 @@ fn chat_completions_encodes_local_shell_calls() {
 #[test]
 fn chat_completions_encodes_plaintext_agent_messages() {
     let prompt = Prompt {
+        base_instructions: BaseInstructions {
+            text: String::new(),
+            provenance: None,
+        },
         input: serde_json::from_value(json!([
             {"type": "agent_message", "author": "reviewer", "recipient": "worker",
-             "content": [{"type": "input_text", "text": "please re-check the migration"}]}
+             "content": [{"type": "input_text", "text": "please re-check the migration"}]},
+            {"type": "agent_message", "author": "reviewer", "recipient": "worker",
+             "content": [{"type": "input_text", "text": "opaque prefix"},
+                         {"type": "encrypted_content", "encrypted_content": "opaque-ciphertext"}]}
         ]))
         .unwrap(),
         ..Default::default()
@@ -2456,12 +2463,14 @@ fn chat_completions_encodes_plaintext_agent_messages() {
     )
     .unwrap();
     let rendered = serde_json::to_string(&body["messages"]).unwrap();
-    // The message is delivered to the recipient, so the user turn is addressed
-    // to `worker` and carries the plaintext body.
-    assert!(
-        rendered.contains("Message from worker: please re-check the migration"),
-        "inter-agent messages must reach the model, got {rendered}"
+    assert_eq!(
+        body["messages"],
+        json!([
+            {"role": "system", "content": ""},
+            {"role": "user", "content": "Message from reviewer: please re-check the migration"}
+        ])
     );
+    assert!(!rendered.contains("opaque-ciphertext"));
 }
 
 #[test]

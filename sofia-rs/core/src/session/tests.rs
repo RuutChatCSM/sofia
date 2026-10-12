@@ -545,7 +545,7 @@ async fn world_state_extension_metrics_follow_turn_model_switch() {
     };
     let turn_context = Arc::new(
         turn_context
-            .with_model(next_model.to_string(), &session.services.models_manager)
+            .with_model(next_model.to_string(), &session.models_manager())
             .await,
     );
     let mut builder = sofia_extension_api::ExtensionRegistryBuilder::<crate::config::Config>::new();
@@ -3838,6 +3838,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
     assert_eq!(
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_model.to_string(),
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
@@ -3882,6 +3883,7 @@ async fn thread_rollback_drops_last_turn_from_history() {
         .collect();
     sess.persist_rollout_items(&rollout_items).await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
+        model_provider_id: None,
         model: "stale-model".to_string(),
         comp_hash: None,
         realtime_active: Some(tc.realtime_active),
@@ -4074,6 +4076,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
     )
     .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
+        model_provider_id: None,
         model: "stale-model".to_string(),
         comp_hash: None,
         realtime_active: None,
@@ -4091,6 +4094,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
     assert_eq!(
         sess.previous_turn_settings().await,
         Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: tc.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(tc.realtime_active),
@@ -4768,11 +4772,10 @@ async fn turn_context_with_model_updates_model_fields() {
     ));
     turn_context.current_settings.store(Arc::clone(&current));
     let updated = turn_context
-        .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+        .with_model("gpt-5.4".to_string(), &session.models_manager())
         .await;
     let expected_model_info = session
-        .services
-        .models_manager
+        .models_manager()
         .get_model_info(
             "gpt-5.4",
             &updated.config.as_ref().to_models_manager_config(),
@@ -6553,7 +6556,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         )
         .with_legacy_custom_ca_fallback(),
         session_telemetry: session_telemetry.clone(),
-        models_manager: Arc::clone(&models_manager),
+        models_manager: arc_swap::ArcSwap::from_pointee(Arc::clone(&models_manager)),
         git_root_discovery: Arc::default(),
         tool_approvals: Mutex::new(ApprovalStore::default()),
         guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
@@ -8861,7 +8864,7 @@ where
         )
         .with_legacy_custom_ca_fallback(),
         session_telemetry: session_telemetry.clone(),
-        models_manager: Arc::clone(&models_manager),
+        models_manager: arc_swap::ArcSwap::from_pointee(Arc::clone(&models_manager)),
         git_root_discovery: Arc::default(),
         tool_approvals: Mutex::new(ApprovalStore::default()),
         guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
@@ -9737,7 +9740,7 @@ async fn record_context_updates_emits_environment_item_for_network_changes() {
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
 
@@ -9793,7 +9796,7 @@ async fn record_context_updates_emits_environment_item_for_cwd_changes() {
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     let cwd = test_path_buf("/new-repo").abs();
@@ -9850,7 +9853,7 @@ async fn record_context_updates_use_environment_permission_profile_and_workspace
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     let environment = current_context
@@ -9905,7 +9908,7 @@ async fn record_context_updates_emits_environment_item_for_time_changes() {
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     current_context.timezone = Some("Europe/Berlin".to_string());
@@ -9929,7 +9932,7 @@ async fn record_context_updates_omits_environment_item_when_disabled() {
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     let mut config = (*current_context.config).clone();
@@ -9994,7 +9997,7 @@ async fn record_context_updates_emits_realtime_start_when_session_becomes_live()
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     current_context.realtime_active = true;
@@ -10018,7 +10021,7 @@ async fn record_context_updates_emits_realtime_end_when_session_stops_being_live
     let mut current_context = previous_context
         .with_model(
             previous_context.model_info().slug.clone(),
-            &session.services.models_manager,
+            &session.models_manager(),
         )
         .await;
     current_context.realtime_active = false;
@@ -10454,6 +10457,7 @@ async fn build_initial_context_restates_realtime_start_when_reference_context_is
     let (session, mut turn_context) = make_session_and_context().await;
     turn_context.realtime_active = true;
     let previous_turn_settings = PreviousTurnSettings {
+        model_provider_id: None,
         model: turn_context.model_info().slug.clone(),
         comp_hash: None,
         realtime_active: Some(true),
@@ -10780,6 +10784,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_split_fi
 async fn build_initial_context_prepends_model_switch_message() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_turn_settings = PreviousTurnSettings {
+        model_provider_id: None,
         model: "previous-regular-model".to_string(),
         comp_hash: None,
         realtime_active: None,
@@ -10811,7 +10816,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
         "gpt-5.4"
     };
     let turn_context = previous_context
-        .with_model(next_model.to_string(), &session.services.models_manager)
+        .with_model(next_model.to_string(), &session.models_manager())
         .await;
     let rollout_path = attach_thread_persistence(&mut session).await;
 
@@ -10834,6 +10839,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
 
     session
         .set_previous_turn_settings(Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: previous_context.model_info().slug.clone(),
             comp_hash: None,
             realtime_active: Some(previous_context.realtime_active),
@@ -11277,7 +11283,7 @@ async fn legacy_compaction_retains_only_the_selected_step(first_attempt: FirstAt
         )
         .await;
     let primary_turn = Arc::new(
-        turn.with_model("gpt-5.4".to_string(), &session.services.models_manager)
+        turn.with_model("gpt-5.4".to_string(), &session.models_manager())
             .await,
     );
     let primary = session
@@ -11379,6 +11385,7 @@ async fn interrupting_compaction_fallback_retains_last_known_step_context() {
     );
     session
         .set_previous_turn_settings(Some(PreviousTurnSettings {
+            model_provider_id: None,
             model: "gpt-5.4".to_string(),
             comp_hash: Some("old".to_string()),
             realtime_active: Some(turn.realtime_active),
@@ -12706,4 +12713,99 @@ async fn session_start_hooks_require_project_trust_without_config_toml() -> std:
     }
 
     Ok(())
+}
+
+/// A provider switch must replace the model catalog, not just the provider.
+///
+/// The catalog is provider-owned: it is fetched from the active provider and
+/// keyed by that provider on disk. Swapping only the provider left the previous
+/// provider's catalog installed, so every later turn resolved model metadata —
+/// and therefore the entire tool plan, including web search — against the
+/// provider the user had just navigated away from.
+///
+/// Asserted on the catalog itself rather than on a tool plan: the catalog is the
+/// thing that was stale, and it is the input every tool-planning decision reads.
+#[tokio::test]
+async fn provider_switch_replaces_the_model_catalog() -> anyhow::Result<()> {
+    let (session, _turn_context) = make_session_and_context().await;
+
+    let before = session.models_manager();
+
+    let mut next_config = load_latest_config_for_session(&session).await;
+    next_config.model_provider_id = "switched-provider".to_string();
+    next_config.model_provider = switched_test_provider(&session).await;
+    session.refresh_runtime_config(next_config).await;
+
+    let after = session.models_manager();
+    assert!(
+        !Arc::ptr_eq(&before, &after),
+        "a provider switch must install a catalog owned by the new provider"
+    );
+
+    Ok(())
+}
+
+/// The opposite direction must hold too, so a one-way fix cannot hide the bug.
+#[tokio::test]
+async fn switching_back_replaces_the_model_catalog_again() -> anyhow::Result<()> {
+    let (session, _turn_context) = make_session_and_context().await;
+
+    let original = session.models_manager();
+
+    let mut to_other = load_latest_config_for_session(&session).await;
+    to_other.model_provider_id = "switched-provider".to_string();
+    to_other.model_provider = switched_test_provider(&session).await;
+    session.refresh_runtime_config(to_other).await;
+    let switched = session.models_manager();
+    assert!(!Arc::ptr_eq(&original, &switched));
+
+    let mut back = load_latest_config_for_session(&session).await;
+    back.model = None;
+    session.refresh_runtime_config(back).await;
+
+    let restored = session.models_manager();
+    assert!(
+        !Arc::ptr_eq(&switched, &restored),
+        "switching back must install yet another catalog"
+    );
+    assert!(
+        !Arc::ptr_eq(&original, &restored),
+        "the restored catalog is rebuilt for the returning provider, not the \
+         original handle reused"
+    );
+
+    Ok(())
+}
+
+/// An ordinary model switch inside one provider must NOT rebuild the catalog.
+///
+/// The catalog is per provider, so refetching it on every model picker change
+/// would cost a network round trip for a change that cannot alter the catalog.
+#[tokio::test]
+async fn model_switch_within_one_provider_keeps_the_catalog() -> anyhow::Result<()> {
+    let (session, _turn_context) = make_session_and_context().await;
+    let before = session.models_manager();
+
+    let mut next_config = load_latest_config_for_session(&session).await;
+    next_config.model = Some("gpt-5.4".to_string());
+    session.refresh_runtime_config(next_config).await;
+
+    let after = session.models_manager();
+    assert!(
+        Arc::ptr_eq(&before, &after),
+        "a model-only switch must keep the provider's existing catalog"
+    );
+
+    Ok(())
+}
+
+/// A distinct provider identity, so a switch is observable as a different
+/// catalog owner. Derived from the session's own provider config and then
+/// renamed/repointed, so it stays structurally valid.
+async fn switched_test_provider(session: &Session) -> sofia_model_provider_info::ModelProviderInfo {
+    let config = session.get_config().await;
+    let mut provider = config.model_provider.clone();
+    provider.name = "Switched Provider".to_string();
+    provider.base_url = Some("https://switched-provider.invalid/v1".to_string());
+    provider
 }

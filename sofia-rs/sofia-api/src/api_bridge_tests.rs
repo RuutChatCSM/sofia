@@ -521,3 +521,52 @@ fn map_api_error_extracts_identity_auth_details_from_headers() {
     );
     assert_eq!(err.identity_error_code.as_deref(), Some("token_expired"));
 }
+
+#[test]
+fn map_api_error_recognizes_explicit_provider_context_overflow() {
+    for error in [
+        serde_json::json!({"type":"invalid_request_error", "message":"prompt is too long: 259628 tokens > 200000 maximum"}),
+        serde_json::json!({"code":"context_length_exceeded", "message":"input exceeds the context window"}),
+    ] {
+        let body = serde_json::json!({"error":error}).to_string();
+        for err in [
+            ApiError::Api {
+                status: http::StatusCode::BAD_REQUEST,
+                message: body.clone(),
+            },
+            ApiError::Transport(TransportError::Http {
+                status: http::StatusCode::BAD_REQUEST,
+                url: None,
+                headers: None,
+                body: Some(body.clone()),
+            }),
+        ] {
+            assert!(matches!(
+                map_api_error(err).details(),
+                CodexErrorDetails::ContextWindowExceeded
+            ));
+        }
+    }
+}
+
+#[test]
+fn map_api_error_keeps_unrelated_invalid_requests_out_of_context_recovery() {
+    for message in [
+        "file is too long",
+        "prompt is too long: invalid",
+        "prompt is too long: 10 tokens > 200000 maximum",
+    ] {
+        let body = serde_json::json!({"error":{"type":"invalid_request_error", "message":message}})
+            .to_string();
+        let err = map_api_error(ApiError::Transport(TransportError::Http {
+            status: http::StatusCode::BAD_REQUEST,
+            url: None,
+            headers: None,
+            body: Some(body),
+        }));
+        assert!(matches!(
+            err.details(),
+            CodexErrorDetails::InvalidRequest(_)
+        ));
+    }
+}

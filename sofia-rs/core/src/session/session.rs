@@ -87,13 +87,22 @@ pub(crate) struct Session {
     pub(crate) goal_judge_budget: AtomicU32,
 }
 
-/// Chooses the provider recorded for a thread snapshot. A `provider/model`
-/// namespaced slug carries its provider, so follow it; otherwise keep the
-/// session's configured provider. This keeps the persisted `(model, provider)`
+/// Chooses the provider recorded for a thread snapshot.
+///
+/// A `provider/model` slug carries its provider, so follow it — but only when
+/// the prefix actually names a configured provider. Some model names contain a
+/// `/` themselves (for example `stealth/space-bunny-alpha`); treating any
+/// prefix as a provider would record a provider that does not exist, and a
+/// later resume or fork would fail to resolve it. Anything else keeps the
+/// session's active provider, which keeps the persisted `(model, provider)`
 /// pair consistent when the user switches to another provider's model.
-fn resolve_model_provider_id(model: &str, fallback: &str) -> String {
+fn resolve_model_provider_id(
+    model: &str,
+    fallback: &str,
+    model_providers: &HashMap<String, ModelProviderInfo>,
+) -> String {
     match model.split_once('/') {
-        Some((provider, _)) if !provider.is_empty() => provider.to_string(),
+        Some((provider, _)) if model_providers.contains_key(provider) => provider.to_string(),
         _ => fallback.to_string(),
     }
 }
@@ -269,6 +278,7 @@ impl SessionConfiguration {
             model_provider_id: resolve_model_provider_id(
                 self.step_settings.collaboration_mode.model(),
                 &self.original_config_do_not_use.model_provider_id,
+                &self.original_config_do_not_use.model_providers,
             ),
             service_tier: self.step_settings.service_tier.clone(),
             approval_policy: self.step_settings.approval_policy.value(),
@@ -312,6 +322,7 @@ impl SessionConfiguration {
             model_provider_id: resolve_model_provider_id(
                 self.step_settings.collaboration_mode.model(),
                 &self.original_config_do_not_use.model_provider_id,
+                &self.original_config_do_not_use.model_providers,
             ),
             service_tier: self.step_settings.service_tier.clone(),
             approval_policy: self.step_settings.approval_policy.value(),
@@ -1467,7 +1478,7 @@ impl Session {
                 )
                 .with_legacy_custom_ca_fallback(),
                 session_telemetry,
-                models_manager: Arc::clone(&models_manager),
+                models_manager: arc_swap::ArcSwap::from_pointee(models_manager),
                 git_root_discovery,
                 tool_approvals: Mutex::new(ApprovalStore::default()),
                 guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
@@ -1685,5 +1696,45 @@ impl Session {
                 Err(err)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_model_provider_id;
+    use sofia_model_provider_info::ModelProviderInfo;
+    use std::collections::HashMap;
+
+    fn providers(ids: &[&str]) -> HashMap<String, ModelProviderInfo> {
+        ids.iter()
+            .map(|id| (id.to_string(), ModelProviderInfo::default()))
+            .collect()
+    }
+
+    #[test]
+    fn follows_a_configured_provider_prefix() {
+        let providers = providers(&["openrouter", "deepseek"]);
+        assert_eq!(
+            resolve_model_provider_id("openrouter/space-bunny-alpha", "openai", &providers),
+            "openrouter"
+        );
+    }
+
+    #[test]
+    fn keeps_the_active_provider_when_the_prefix_is_part_of_the_model_name() {
+        let providers = providers(&["openrouter", "deepseek"]);
+        assert_eq!(
+            resolve_model_provider_id("stealth/space-bunny-alpha", "openrouter", &providers),
+            "openrouter"
+        );
+    }
+
+    #[test]
+    fn keeps_the_active_provider_for_models_without_a_namespace() {
+        let providers = providers(&["openrouter"]);
+        assert_eq!(
+            resolve_model_provider_id("space-bunny-alpha", "openrouter", &providers),
+            "openrouter"
+        );
     }
 }

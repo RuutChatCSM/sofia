@@ -250,6 +250,7 @@ impl Session {
                         ctx.turn_id.as_deref(),
                     ) {
                         active_segment.previous_turn_settings = Some(PreviousTurnSettings {
+                            model_provider_id: None,
                             model: ctx.model.clone(),
                             comp_hash: ctx.comp_hash.clone(),
                             realtime_active: ctx.realtime_active,

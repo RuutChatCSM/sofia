@@ -346,3 +346,36 @@ async fn chat_stream_transport_error_surfaces_as_stream_error() {
         "a transport failure must be reported to the consumer"
     );
 }
+
+#[tokio::test]
+async fn chat_stream_collaboration_arguments_are_explicitly_plaintext() {
+    for name in ["spawn_agent", "followup_task", "send_message"] {
+        let arguments = r#"{"message":"Inspect architecture without edits"}"#;
+        let chunks = sse_events(&[
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":name,"arguments":arguments}}]}}]}),
+            json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]}),
+        ]);
+        let events = collect(spawn_chat_completions_stream(
+            stream_response(HeaderMap::new(), chunks),
+            idle_timeout(),
+            /*telemetry*/ None,
+            /*turn_state*/ None,
+        ))
+        .await;
+        let calls: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                ResponseEvent::OutputItemAdded(ResponseItem::FunctionCall {
+                    encrypted_function_args,
+                    ..
+                })
+                | ResponseEvent::OutputItemDone(ResponseItem::FunctionCall {
+                    encrypted_function_args,
+                    ..
+                }) => Some(encrypted_function_args.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(calls, vec![Some(Vec::new()), Some(Vec::new())]);
+    }
+}

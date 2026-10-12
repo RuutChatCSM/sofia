@@ -2595,7 +2595,7 @@ async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
         .mount(&server)
         .await;
 
-    let (mut session, mut turn_context) = make_session_and_context().await;
+    let (session, mut turn_context) = make_session_and_context().await;
     Arc::make_mut(&mut turn_context.config)
         .permissions
         .approval_policy
@@ -2610,7 +2610,7 @@ async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
         Arc::clone(&session.services.auth_manager),
         config.model_provider.clone(),
     );
-    session.services.models_manager = models_manager;
+    session.replace_models_manager(models_manager);
     turn_context.config = Arc::clone(&config);
     turn_context.provider = create_model_provider(
         config.model_provider.clone(),
@@ -2907,7 +2907,7 @@ async fn strict_auto_review_forces_guardian_for_mcp_policy_skip() {
     )
     .await;
 
-    let (mut session, mut turn_context) = make_session_and_context().await;
+    let (session, mut turn_context) = make_session_and_context().await;
     Arc::make_mut(&mut turn_context.config)
         .permissions
         .approval_policy
@@ -2922,7 +2922,7 @@ async fn strict_auto_review_forces_guardian_for_mcp_policy_skip() {
         Arc::clone(&session.services.auth_manager),
         config.model_provider.clone(),
     );
-    session.services.models_manager = models_manager;
+    session.replace_models_manager(models_manager);
     turn_context.config = Arc::clone(&config);
     turn_context.provider = create_model_provider(
         config.model_provider.clone(),
@@ -3259,7 +3259,7 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
         }),
         AskForApproval::Never,
     ] {
-        let (mut session, mut turn_context) = make_session_and_context().await;
+        let (session, mut turn_context) = make_session_and_context().await;
         turn_context.auth_manager = Some(crate::test_support::auth_manager_from_auth(
             sofia_login::CodexAuth::create_dummy_chatgpt_auth_for_testing(),
         ));
@@ -3278,7 +3278,7 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
             Arc::clone(&session.services.auth_manager),
             config.model_provider.clone(),
         );
-        session.services.models_manager = models_manager;
+        session.replace_models_manager(models_manager);
         turn_context.config = Arc::clone(&config);
         turn_context.provider = create_model_provider(
             config.model_provider.clone(),

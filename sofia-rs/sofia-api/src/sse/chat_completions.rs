@@ -240,7 +240,8 @@ pub async fn process_chat_completions_sse(
                                             name: name.to_string(),
                                             namespace: None,
                                             arguments: String::new(),
-                                            encrypted_function_args: None,
+                                            // Chat Completions function arguments are always plaintext.
+                                            encrypted_function_args: Some(Vec::new()),
                                             call_id: entry.0.clone(),
                                             internal_chat_message_metadata_passthrough: None,
                                         },
@@ -399,7 +400,7 @@ async fn finalize_chat_turn(
                     name,
                     namespace: None,
                     arguments,
-                    encrypted_function_args: None,
+                    encrypted_function_args: Some(Vec::new()),
                     call_id,
                     internal_chat_message_metadata_passthrough: None,
                 },

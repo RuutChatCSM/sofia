@@ -3496,16 +3496,16 @@ fn build_chat_completions_body(
             | ResponseItem::Other => {}
             // Inter-agent messages. Chat Completions has no agent-to-agent
             // channel, so a plaintext message becomes a user-role turn from the
-            // recipient. Encrypted payloads are not readable on this wire and
+            // sender. Encrypted payloads are not readable on this wire and
             // are skipped rather than sent as noise.
             ResponseItem::AgentMessage {
-                recipient, content, ..
+                author, content, ..
             } => {
                 if let Some(text) = sofia_protocol::models::plaintext_agent_message_content(content)
                 {
                     messages.push(json!({
                         "role": "user",
-                        "content": format!("Message from {recipient}: {text}")
+                        "content": format!("Message from {author}: {text}")
                     }));
                 } else {
                     debug!("chat completions: skipping encrypted inter-agent message");

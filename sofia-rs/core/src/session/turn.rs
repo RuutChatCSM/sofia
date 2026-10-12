@@ -338,6 +338,7 @@ pub(crate) async fn run_turn(
     sess.merge_connector_selection(explicitly_enabled_connectors.clone())
         .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
+        model_provider_id: Some(turn_context.config.model_provider_id.clone()),
         model: turn_context.model_info().slug.clone(),
         comp_hash: turn_context.model_info().comp_hash.clone(),
         realtime_active: Some(turn_context.realtime_active),
@@ -365,6 +366,7 @@ pub(crate) async fn run_turn(
     // 1. At the start of a turn, so the fresh turn input in `input` gets sampled first.
     // 2. After auto-compact, when model/tool continuation needs to resume before any steer.
 
+    let mut context_window_recovery_attempted = false;
     let mut next_step_context = Some(first_step_context);
     loop {
         // Note that pending_input would be something like a message the user
@@ -739,6 +741,29 @@ pub(crate) async fn run_turn(
             }
             Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted) => {
                 return Err(err);
+            }
+            Err(err)
+                if matches!(err.details(), CodexErrorDetails::ContextWindowExceeded)
+                    && !context_window_recovery_attempted =>
+            {
+                // Provider catalogs can omit limits. Recover once using the provider's
+                // explicit overflow response, rather than retrying the same oversized turn.
+                context_window_recovery_attempted = true;
+                run_auto_compact(
+                    &sess,
+                    Arc::clone(&step_context),
+                    /*fallback_step_context*/ None,
+                    &mut client_session,
+                    InitialContextInjection::BeforeLastUserMessage {
+                        world_state: Arc::clone(&world_state),
+                        step_context: Arc::clone(&step_context),
+                    },
+                    CompactionReason::ContextLimit,
+                    CompactionPhase::MidTurn,
+                )
+                .await?;
+                can_drain_pending_input = false;
+                continue;
             }
             Err(sofia_error)
                 if matches!(
@@ -1297,11 +1322,30 @@ async fn maybe_run_previous_model_inline_compact(
         turn_context.model_info().comp_hash.as_deref(),
     );
     let previous_model = previous_turn_settings.model;
+    if previous_turn_settings
+        .model_provider_id
+        .as_deref()
+        .is_some_and(|provider_id| provider_id != turn_context.config.model_provider_id)
+    {
+        // The old model belongs to another endpoint. The current-model budget
+        // check below performs compaction with a model this provider can serve.
+        return Ok(());
+    }
     let previous_model_turn_context = Arc::new(
         turn_context
-            .with_model(previous_model.clone(), &sess.services.models_manager)
+            .with_model(previous_model.clone(), &sess.models_manager())
             .await,
     );
+
+    if previous_model_turn_context
+        .model_info()
+        .used_fallback_model_metadata
+        && previous_model != turn_context.model_info().slug
+    {
+        // Resumed history may predate provider identity metadata. Never send an
+        // unavailable prior model to the current endpoint.
+        return Ok(());
+    }
 
     if should_compact_for_comp_hash_change {
         let step_context = sess
@@ -2767,8 +2811,7 @@ async fn try_run_sampling_request(
             }
             ResponseEvent::ModelsEtag(etag) => {
                 // Update internal state with latest models etag
-                sess.services
-                    .models_manager
+                sess.models_manager()
                     .refresh_if_new_etag(etag, turn_context.config.http_client_factory())
                     .await;
             }

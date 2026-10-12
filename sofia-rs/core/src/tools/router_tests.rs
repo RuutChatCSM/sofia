@@ -645,3 +645,32 @@ fn namespace_function_names(specs: &[ToolSpec], namespace_name: &str) -> Vec<Str
         })
         .unwrap_or_default()
 }
+
+#[test]
+fn collaboration_plaintext_source_survives_flattened_chat_completions_names() {
+    for name in ["spawn_agent", "followup_task", "send_message"] {
+        for namespace in [None, Some("functions"), Some("collaboration")] {
+            for (marker, expected) in [
+                (Some(Vec::new()), ToolCallSource::DirectPlaintextMessage),
+                (None, ToolCallSource::Direct),
+                (
+                    Some(vec!["opaque encrypted arguments".to_string()]),
+                    ToolCallSource::Direct,
+                ),
+            ] {
+                let call = ToolRouter::build_tool_call(ResponseItem::FunctionCall {
+                    id: None,
+                    name: name.to_string(),
+                    namespace: namespace.map(str::to_string),
+                    arguments: r#"{"message":"Inspect architecture"}"#.to_string(),
+                    encrypted_function_args: marker,
+                    call_id: "message-call".to_string(),
+                    internal_chat_message_metadata_passthrough: None,
+                })
+                .unwrap()
+                .unwrap();
+                assert_eq!(call.direct_source(), expected);
+            }
+        }
+    }
+}

@@ -1,5 +1,6 @@
 use sofia_protocol::config_types::Personality;
 use sofia_protocol::config_types::ReasoningSummary;
+use sofia_protocol::openai_models::ApplyPatchToolType;
 use sofia_protocol::openai_models::ConfigShellToolType;
 use sofia_protocol::openai_models::ModelInfo;
 use sofia_protocol::openai_models::ModelInstructionsVariables;
@@ -24,9 +25,12 @@ const PERSONALITY_SECTION_HEADER: &str = "# Personality";
 
 pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig) -> ModelInfo {
     if let Some(context_window) = config.model_context_window {
+        // Provider catalogs often advertise only context_window. A global override
+        // must not enlarge that hard limit when switching to a smaller model.
         model.context_window = Some(
             model
                 .max_context_window
+                .or(model.context_window)
                 .map_or(context_window, |max_context_window| {
                     context_window.min(max_context_window)
                 }),
@@ -165,7 +169,12 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         default_reasoning_summary: ReasoningSummary::Auto,
         support_verbosity: false,
         default_verbosity: None,
-        apply_patch_tool_type: None,
+        // An unknown model is still a coding model. Withholding `apply_patch` here
+        // is the expensive default: every BYOK / models.dev model (i.e. anything
+        // not in the vendored catalog) silently lost file editing and fell back
+        // to shell rewrites. Providers can still deny the tool, and callers that
+        // need a stricter posture gate on `used_fallback_model_metadata` below.
+        apply_patch_tool_type: Some(ApplyPatchToolType::Freeform),
         web_search_tool_type: WebSearchToolType::Text,
         truncation_policy: TruncationPolicyConfig::bytes(/*limit*/ 10_000),
         supports_image_detail_original: false,

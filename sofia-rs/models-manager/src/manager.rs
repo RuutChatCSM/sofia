@@ -727,7 +727,7 @@ pub(crate) fn construct_model_info_from_candidates(
             if messages
                 .instructions_template
                 .as_ref()
-                .is_none_or(|t| t.is_empty())
+                .is_none_or(std::string::String::is_empty)
             {
                 messages.instructions_template = Some(model_info::BASE_INSTRUCTIONS.to_string());
             }
