@@ -2,6 +2,16 @@
 
 Release binaries and notes are published on the [releases page](https://github.com/RuutChatCSM/sofia/releases).
 
+## 0.1.7
+
+### Fixed
+
+- Chat Completions providers can execute JSON-wrapped `apply_patch` calls.
+- Historical custom-tool arguments are serialized as strings when resuming with
+  Chat Completions providers such as DeepSeek.
+- Non-GPT model-name differences no longer produce a false cyber fallback warning.
+- macOS notarization uses unique temporary directories for API-key files.
+
 ## 0.1.5
 
 Claude models now run over Anthropic's native Messages API with prompt caching,

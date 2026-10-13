@@ -84,7 +84,7 @@ fi
 mkdir -p "$report_dir"
 
 notarization_temp_dir="$(mktemp -d)"
-api_key_file="$(mktemp /tmp/notarization-api-key.XXXXXXXX.p8)"
+api_key_file="$notarization_temp_dir/AuthKey.p8"
 trap 'rm -rf "$notarization_temp_dir"; rm -f "$api_key_file"' EXIT
 
 binary_name="$(basename "$binary_path")"

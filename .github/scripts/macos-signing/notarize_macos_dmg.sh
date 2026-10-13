@@ -80,8 +80,9 @@ fi
 
 mkdir -p "$report_dir"
 
-api_key_file="$(mktemp /tmp/notarization-api-key.XXXXXXXX.p8)"
-trap 'rm -f "$api_key_file" >/dev/null' EXIT
+notarization_temp_dir="$(mktemp -d)"
+api_key_file="$notarization_temp_dir/AuthKey.p8"
+trap 'rm -rf "$notarization_temp_dir" >/dev/null' EXIT
 printf '%s' "$AC_API_KEY" | base64 --decode >"$api_key_file"
 chmod 0600 "$api_key_file"
 
