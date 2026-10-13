@@ -255,7 +255,7 @@ pub async fn process_anthropic_sse(
                 };
                 match delta["type"].as_str() {
                     Some("text_delta") => {
-                        if !blocks.contains_key(&index) {
+                        if let std::collections::btree_map::Entry::Vacant(e) = blocks.entry(index) {
                             let id = ResponseItemId::new(&format!("{response_id}_{index}"));
                             let _ = tx_event
                                 .send(Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message {
@@ -266,13 +266,10 @@ pub async fn process_anthropic_sse(
                                     internal_chat_message_metadata_passthrough: None,
                                 })))
                                 .await;
-                            blocks.insert(
-                                index,
-                                AnthropicBlock::Text {
-                                    id,
-                                    text: String::new(),
-                                },
-                            );
+                            e.insert(AnthropicBlock::Text {
+                                id,
+                                text: String::new(),
+                            });
                         }
                         if let Some(AnthropicBlock::Text { text, .. }) = blocks.get_mut(&index)
                             && let Some(value) = delta["text"].as_str()
@@ -355,6 +352,10 @@ pub async fn process_anthropic_sse(
                     Some("rate_limit_error") => ApiError::RateLimitExceeded {
                         message,
                         delay: None,
+                    },
+                    Some("invalid_request_error") => ApiError::Api {
+                        status: http::StatusCode::BAD_REQUEST,
+                        message: parsed.to_string(),
                     },
                     _ => ApiError::Stream(message),
                 };

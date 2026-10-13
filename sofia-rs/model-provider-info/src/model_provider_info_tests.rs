@@ -1075,3 +1075,26 @@ fn test_built_in_includes_discovered_providers() {
     let custom = merged.get("custom-provider").unwrap();
     assert_eq!(custom.wire_api, WireApi::ChatCompletions);
 }
+
+#[test]
+fn credential_candidate_priority_is_preserved_without_sorting_paths() {
+    let root = tempdir().unwrap();
+    let primary = root.path().join("z-configured-home");
+    let legacy = root.path().join("a-legacy-home");
+    std::fs::create_dir_all(&primary).unwrap();
+    std::fs::create_dir_all(&legacy).unwrap();
+    std::fs::write(
+        primary.join("sofia-auth.json"),
+        r#"{"ANTHROPIC_API_KEY":"configured-key"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        legacy.join("sofia-auth.json"),
+        r#"{"ANTHROPIC_API_KEY":"legacy-key"}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        super::api_key_from_candidates("ANTHROPIC_API_KEY", [primary.clone(), primary, legacy]),
+        Some("configured-key".to_string())
+    );
+}

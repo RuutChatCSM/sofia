@@ -911,9 +911,18 @@ pub fn api_key_from_auth_file(env_key: &str) -> Option<String> {
         candidates.push(home.join(".sofia"));
         candidates.push(home.join(".config").join("sofia"));
     }
-    candidates.sort();
-    candidates.dedup();
+    api_key_from_candidates(env_key, candidates)
+}
+
+fn api_key_from_candidates(
+    env_key: &str,
+    candidates: impl IntoIterator<Item = std::path::PathBuf>,
+) -> Option<String> {
+    let mut seen = std::collections::HashSet::new();
     for candidate in candidates {
+        if !seen.insert(candidate.clone()) {
+            continue;
+        }
         let file = candidate.join("sofia-auth.json");
         let Ok(contents) = std::fs::read_to_string(&file) else {
             continue;

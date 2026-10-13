@@ -491,3 +491,69 @@ async fn anthropic_preserves_signed_and_redacted_thinking_in_block_order() {
     };
     assert_eq!(crate::decode_anthropic_thinking(last), Some(vec![redacted]));
 }
+
+#[tokio::test]
+async fn anthropic_sse_context_overflow_enters_existing_compaction_error_path() {
+    let chunks = sse_events(&[(
+        "error",
+        json!({"error":{"type":"invalid_request_error","message":"prompt is too long: 259628 tokens > 200000 maximum"}}),
+    )]);
+    let mut stream = spawn_anthropic_stream(
+        stream_response(chunks),
+        idle_timeout(),
+        /*telemetry*/ None,
+        /*turn_state*/ None,
+        no_freeform(),
+    );
+    let mut mapped = None;
+    while let Some(event) = stream.rx_event.recv().await {
+        if let Err(error) = event {
+            mapped = Some(crate::api_bridge::map_api_error(error));
+        }
+    }
+    assert!(mapped.as_ref().is_some_and(|error| matches!(
+        error.details(),
+        sofia_protocol::error::CodexErrorDetails::ContextWindowExceeded
+    )));
+}
+
+#[tokio::test]
+async fn anthropic_cache_usage_counts_reads_and_writes_once() {
+    let chunks = sse_events(&[
+        (
+            "message_start",
+            json!({"message":{"id":"usage","usage":{"input_tokens":5,"cache_read_input_tokens":30,"cache_creation_input_tokens":20}}}),
+        ),
+        (
+            "message_delta",
+            json!({"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}),
+        ),
+        ("message_stop", json!({})),
+    ]);
+    let events = collect(spawn_anthropic_stream(
+        stream_response(chunks),
+        idle_timeout(),
+        /*telemetry*/ None,
+        /*turn_state*/ None,
+        no_freeform(),
+    ))
+    .await;
+    let ResponseEvent::Completed {
+        token_usage: Some(usage),
+        ..
+    } = events.last().unwrap()
+    else {
+        panic!("usage missing");
+    };
+    assert_eq!(
+        usage,
+        &TokenUsage {
+            input_tokens: 55,
+            cached_input_tokens: 30,
+            cache_write_input_tokens: 20,
+            output_tokens: 7,
+            total_tokens: 62,
+            ..Default::default()
+        }
+    );
+}
