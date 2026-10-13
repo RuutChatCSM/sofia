@@ -283,6 +283,10 @@ fn write_permissions_for_paths(
 fn apply_patch_payload_command(payload: &ToolPayload) -> Option<String> {
     match payload {
         ToolPayload::Custom { input } => Some(input.clone()),
+        ToolPayload::Function { arguments } => {
+            let value: serde_json::Value = serde_json::from_str(arguments).ok()?;
+            value.get("input")?.as_str().map(str::to_owned)
+        }
         _ => None,
     }
 }
@@ -372,9 +376,10 @@ impl ApplyPatchHandler {
             ..
         } = invocation;
 
-        let ToolPayload::Custom { input: patch_input } = payload else {
+        let Some(patch_input) = apply_patch_payload_command(&payload) else {
             return Err(FunctionCallError::RespondToModel(
-                "apply_patch handler received unsupported payload".to_string(),
+                "apply_patch requires raw patch text or JSON arguments with a string input field"
+                    .to_string(),
             ));
         };
         let args = match sofia_apply_patch::parse_patch(&patch_input) {

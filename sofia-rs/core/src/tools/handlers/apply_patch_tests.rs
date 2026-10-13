@@ -18,6 +18,21 @@ use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
+#[test]
+fn chat_completions_patch_arguments_preserve_patch_text() {
+    let patch = "*** Begin Patch\n*** Add File: spec.md\n+# Spec\n*** End Patch";
+    let payload = ToolPayload::Function {
+        arguments: json!({"input": patch}).to_string(),
+    };
+    assert_eq!(
+        apply_patch_payload_command(&payload),
+        Some(patch.to_string())
+    );
+    assert!(
+        sofia_apply_patch::parse_patch(&apply_patch_payload_command(&payload).unwrap()).is_ok()
+    );
+}
+
 fn local_context(cwd: &PathUri) -> FileSystemSandboxPolicyContext<'_> {
     FileSystemSandboxPolicyContext {
         cwd,
