@@ -106,6 +106,37 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn claude_model_header_mismatch_reports_resolved_alias() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = start_mock_server().await;
+    let response = sse_response(sse_completed("resp-claude"))
+        .insert_header("OpenAI-Model", "claude-opus-4-5-20251101");
+    let _mock = mount_response_once(&server, response).await;
+    let test = test_codex()
+        .with_model("claude-opus-4-5")
+        .build(&server)
+        .await?;
+    test.sofia
+        .start_or_steer_turn(disabled_text_turn(&test, "hello"))
+        .await?;
+    let warning = wait_for_event(&test.sofia, |event| {
+        matches!(event, EventMsg::Warning(warning) if warning.message.starts_with("The provider reported model"))
+    }).await;
+    let EventMsg::Warning(warning) = warning else {
+        panic!("expected warning event");
+    };
+    assert_eq!(
+        warning.message,
+        "The provider reported model claude-opus-4-5-20251101 for requested model claude-opus-4-5. This may be a resolved model alias."
+    );
+    let _ = wait_for_event(&test.sofia, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

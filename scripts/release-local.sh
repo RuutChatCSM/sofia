@@ -286,7 +286,13 @@ if [[ "$SKIP_SIGN" == "0" || "$SKIP_DMG" == "0" ]]; then
       run security unlock-keychain -p sofia-release "$CREATED_KEYCHAIN"
       run security import "$p12_path" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$CREATED_KEYCHAIN"
       run security import "$p12_path" -P "$MACOS_CERTIFICATE_PWD" -A -t agg -f pkcs12 -k "$CREATED_KEYCHAIN"
-      run security list-keychain -d user -s "$CREATED_KEYCHAIN"
+      # Grant codesign non-interactive access to the imported private key. The
+      # keychain is created fresh each run, so without a partition list codesign
+      # cannot use the key and fails with errSecInternalComponent.
+      run security set-key-partition-list -S apple-tool:,apple:,codesign: \
+        -s -k sofia-release "$CREATED_KEYCHAIN"
+      run security list-keychain -d user -s "$CREATED_KEYCHAIN" \
+        "$HOME/Library/Keychains/login.keychain-db"
     fi
 
     IDENTITY="$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/ { print $2; exit }')"

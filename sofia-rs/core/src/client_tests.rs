@@ -2405,6 +2405,10 @@ fn chat_completions_encodes_custom_tool_calls() {
         .expect("assistant tool_calls message must precede the tool result");
     assert_eq!(assistant["tool_calls"][0]["id"], "ct-1");
     assert_eq!(assistant["tool_calls"][0]["function"]["name"], "patch");
+    assert_eq!(
+        assistant["tool_calls"][0]["function"]["arguments"],
+        json!({"input": "*** Begin Patch"}).to_string()
+    );
     assert!(
         messages
             .iter()

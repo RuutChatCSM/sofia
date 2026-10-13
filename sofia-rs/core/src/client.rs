@@ -3611,7 +3611,7 @@ fn build_chat_completions_body(
                         // Custom tools take free-form input; the wire field is
                         // still JSON arguments, so the raw text is passed
                         // through as a string argument.
-                        "arguments": json!({ "input": input }),
+                        "arguments": json!({ "input": input }).to_string(),
                     }
                 }));
                 outstanding_tool_results.insert(call_id.clone());
@@ -3660,7 +3660,7 @@ fn build_chat_completions_body(
                     "type": "function",
                     "function": {
                         "name": "local_shell",
-                        "arguments": json!({ "action": command }),
+                        "arguments": json!({ "action": command }).to_string(),
                     }
                 }));
                 outstanding_tool_results.insert(call_id.clone());

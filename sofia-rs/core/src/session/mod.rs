@@ -3825,6 +3825,21 @@ impl Session {
 
         warn!("server reported model {server_model} while requested model was {requested_model}");
 
+        // Providers may resolve aliases to dated model IDs. A model mismatch
+        // alone is not evidence of an OpenAI cyber-policy downgrade.
+        if requested_model_normalized != "gpt-5.3-sofia" || server_model_normalized != "gpt-5.2" {
+            self.send_event(
+                turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: format!(
+                        "The provider reported model {server_model} for requested model {requested_model}. This may be a resolved model alias."
+                    ),
+                }),
+            )
+            .await;
+            return true;
+        }
+
         let warning_message = format!(
             "Your account was flagged for potentially high-risk cyber activity and this request was routed to gpt-5.2 as a fallback. To regain access to gpt-5.3-sofia, apply for trusted access: {CYBER_VERIFY_URL} or learn more: {CYBER_SAFETY_URL}"
         );
