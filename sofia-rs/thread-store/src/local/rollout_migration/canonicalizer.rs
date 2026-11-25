@@ -22,6 +22,7 @@ use sofia_protocol::protocol::TurnCompleteEvent;
 use sofia_protocol::protocol::TurnStartedEvent;
 use sofia_rollout::RolloutItem;
 use sofia_rollout::RolloutLine;
+use sofia_rollout::slim_rollout_item_for_persistence;
 use std::collections::HashSet;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -416,18 +417,15 @@ impl LegacyRolloutCanonicalizer {
         let completed_at_ms = DateTime::parse_from_rfc3339(timestamp)
             .map_err(migration_error)?
             .timestamp_millis();
-        self.write_item(
-            writer,
-            timestamp,
-            RolloutItem::EventMsg(EventMsg::ItemCompleted(ItemCompletedEvent {
-                thread_id: self.thread_id,
-                turn_id,
-                item,
-                started_at_ms: None,
-                completed_at_ms,
-            })),
-        )
-        .await
+        let mut item = RolloutItem::EventMsg(EventMsg::ItemCompleted(ItemCompletedEvent {
+            thread_id: self.thread_id,
+            turn_id,
+            item,
+            started_at_ms: None,
+            completed_at_ms,
+        }));
+        slim_rollout_item_for_persistence(&mut item);
+        self.write_item(writer, timestamp, item).await
     }
 
     async fn write_reasoning(

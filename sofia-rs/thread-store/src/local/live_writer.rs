@@ -8,6 +8,7 @@ use sofia_rollout::RolloutItem;
 use sofia_rollout::RolloutRecorder;
 use sofia_rollout::RolloutRecorderParams;
 use sofia_rollout::is_persisted_rollout_item;
+use sofia_rollout::slim_rollout_item_for_persistence;
 use tracing::warn;
 
 use super::LocalThreadStore;
@@ -322,6 +323,9 @@ async fn write_and_project(
             items.retain(|item| is_persisted_rollout_item(item, history_mode));
             if items.is_empty() {
                 return Ok(());
+            }
+            for item in &mut items {
+                slim_rollout_item_for_persistence(item);
             }
             RolloutWriteOp::AppendItems(items)
         }

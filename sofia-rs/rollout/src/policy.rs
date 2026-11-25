@@ -25,6 +25,24 @@ pub fn is_persisted_rollout_item(item: &RolloutItem, history_mode: ThreadHistory
     }
 }
 
+/// Removes duplicate command output from an item before it is persisted.
+///
+/// Persisted rollout readers rebuild command executions from `aggregated_output` alone
+/// (`ThreadItem::from`), so `formatted_output` is never needed on disk and `stdout` is
+/// redundant whenever it matches `aggregated_output`. Failed unified-exec commands keep a
+/// distinct `stdout` (the aggregated output also carries the failure message), so only the
+/// matching case is dropped.
+pub fn slim_rollout_item_for_persistence(item: &mut RolloutItem) {
+    if let RolloutItem::EventMsg(EventMsg::ItemCompleted(event)) = item
+        && let TurnItem::CommandExecution(command) = &mut event.item
+    {
+        if command.stdout == command.aggregated_output {
+            command.stdout = None;
+        }
+        command.formatted_output = None;
+    }
+}
+
 /// Return the rollout items that should be persisted for a live append.
 pub fn persisted_rollout_items(
     items: &[RolloutItem],
@@ -204,3 +222,7 @@ pub fn should_persist_event_msg(ev: &EventMsg, history_mode: ThreadHistoryMode) 
         | EventMsg::CollabResumeBegin(_) => false,
     }
 }
+
+#[cfg(test)]
+#[path = "policy_tests.rs"]
+mod tests;
