@@ -51,6 +51,7 @@ mod async_watcher;
 mod errors;
 mod head_tail_buffer;
 mod oneshot;
+mod poll_backoff;
 mod process;
 mod process_manager;
 mod process_state;

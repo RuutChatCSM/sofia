@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::sync::PoisonError;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use tokio::sync::watch;
@@ -62,6 +63,7 @@ use crate::unified_exec::async_watcher::start_streaming_output;
 use crate::unified_exec::clamp_yield_time;
 use crate::unified_exec::generate_chunk_id;
 use crate::unified_exec::head_tail_buffer::HeadTailBuffer;
+use crate::unified_exec::poll_backoff::PollOutcome;
 use crate::unified_exec::process::OutputHandles;
 use crate::unified_exec::process::SpawnLifecycleHandle;
 use crate::unified_exec::process::UnifiedExecProcess;
@@ -947,12 +949,25 @@ impl UnifiedExecProcessManager {
             }
         }
 
+        let input_is_empty = request.input.is_empty();
+        let effective_min_empty_yield_ms = process
+            .poll_backoff
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .next_min_yield_ms(
+                input_is_empty,
+                MIN_EMPTY_YIELD_TIME_MS,
+                self.max_write_stdin_yield_time_ms,
+            );
         let yield_time_ms = {
             // Empty polls use configurable background timeout bounds. Non-empty
             // writes keep a fixed max cap so interactive stdin remains responsive.
             let time_ms = request.yield_time_ms.max(MIN_YIELD_TIME_MS);
-            if request.input.is_empty() {
-                time_ms.clamp(MIN_EMPTY_YIELD_TIME_MS, self.max_write_stdin_yield_time_ms)
+            if input_is_empty {
+                time_ms.clamp(
+                    effective_min_empty_yield_ms,
+                    self.max_write_stdin_yield_time_ms,
+                )
             } else {
                 time_ms.min(MAX_YIELD_TIME_MS)
             }
@@ -963,12 +978,13 @@ impl UnifiedExecProcessManager {
             Self::collect_output_until_deadline(&output, pause_state, deadline).await;
         let wall_time = Instant::now().saturating_duration_since(start);
 
+        let produced_output = collected_output.total_bytes() > 0;
         let original_token_count = usize::try_from(approx_tokens_from_byte_count(
             collected_output.total_bytes(),
         ))
         .unwrap_or(usize::MAX);
         let output_omitted_bytes = NonZeroUsize::new(collected_output.omitted_bytes());
-        let collected = collected_output.to_bytes_with_omission_marker();
+        let mut collected = collected_output.to_bytes_with_omission_marker();
         let chunk_id = generate_chunk_id();
         if network_approval
             .as_ref()
@@ -1027,6 +1043,38 @@ impl UnifiedExecProcessManager {
                 }
             }
         };
+
+        if process_id.is_some() {
+            let outcome = if !input_is_empty {
+                PollOutcome::Input
+            } else if produced_output {
+                PollOutcome::NewOutput
+            } else {
+                PollOutcome::NoNewOutput
+            };
+            process
+                .poll_backoff
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .record(outcome);
+        }
+
+        if process_id.is_some()
+            && input_is_empty
+            && !produced_output
+            && effective_min_empty_yield_ms > MIN_EMPTY_YIELD_TIME_MS
+        {
+            let waited_seconds = yield_time_ms / 1000;
+            if !collected.is_empty() {
+                collected.push(b'\n');
+            }
+            collected.extend_from_slice(
+                format!(
+                    "Process still running with no new output; waited {waited_seconds}s. Consider waiting longer between polls or stopping it."
+                )
+                .as_bytes(),
+            );
+        }
 
         let response = ExecCommandToolOutput {
             event_call_id,

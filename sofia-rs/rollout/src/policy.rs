@@ -118,6 +118,11 @@ pub fn should_persist_event_msg(ev: &EventMsg, history_mode: ThreadHistoryMode) 
         | EventMsg::TurnComplete(_)
         | EventMsg::ThreadSettingsApplied(_) => true,
 
+        // Persisted in both history modes so rollouts record why a turn was slow or
+        // failed when a model stream disconnected and retried. Model history
+        // reconstruction ignores events, so this does not change what the model sees.
+        EventMsg::StreamError(_) => true,
+
         // Only persist these legacy events when the thread's history mode is Legacy.
         // New, paginated rollouts persist ItemCompleted events with TurnItems.
         EventMsg::UserMessage(_)
@@ -178,7 +183,6 @@ pub fn should_persist_event_msg(ev: &EventMsg, history_mode: ThreadHistoryMode) 
         | EventMsg::RequestUserInput(_)
         | EventMsg::ElicitationRequest(_)
         | EventMsg::ApplyPatchApprovalRequest(_)
-        | EventMsg::StreamError(_)
         | EventMsg::PatchApplyBegin(_)
         | EventMsg::PatchApplyUpdated(_)
         | EventMsg::TurnDiff(_)
@@ -204,3 +208,7 @@ pub fn should_persist_event_msg(ev: &EventMsg, history_mode: ThreadHistoryMode) 
         | EventMsg::CollabResumeBegin(_) => false,
     }
 }
+
+#[cfg(test)]
+#[path = "policy_tests.rs"]
+mod tests;
