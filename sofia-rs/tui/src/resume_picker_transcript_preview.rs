@@ -161,7 +161,7 @@ fn scan_legacy_transcript_preview(
     )?
     .with_max_record_bytes(MAX_LEGACY_TRANSCRIPT_PREVIEW_SCAN_BYTES);
     loop {
-        let outcome = match scanner.scan_next_rollout_line() {
+        let outcome = match scanner.scan_next_rollout_line_for_rollout(path) {
             Ok(Some(outcome)) => outcome,
             Ok(None) => break,
             Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),

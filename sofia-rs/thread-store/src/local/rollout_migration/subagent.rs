@@ -31,7 +31,7 @@ pub(super) async fn select_bounded_context(
     session_meta: SessionMetaLine,
 ) -> ThreadStoreResult<Option<Vec<RolloutItem>>> {
     tokio::task::spawn_blocking(move || {
-        let file = File::open(rollout_path).map_err(migration_error)?;
+        let file = File::open(&rollout_path).map_err(migration_error)?;
         let mut scanner = ReverseJsonlScanner::new(file)
             .map_err(migration_error)?
             .with_max_record_bytes(super::MAX_ROLLOUT_LINE_BYTES);
@@ -42,9 +42,15 @@ pub(super) async fn select_bounded_context(
                 ScanOutcome::Parsed(value) => value,
                 ScanOutcome::Rejected(_) => continue,
             };
-            let Ok(Some(line)) = line_parser::parse_legacy_rollout_value(value) else {
-                continue;
-            };
+            let line =
+                match line_parser::parse_legacy_rollout_value_for_rollout(value, &rollout_path) {
+                    Ok(Some(line)) => line,
+                    Ok(None) => continue,
+                    Err(err) if sofia_rollout::is_image_blob_error_message(&err) => {
+                        return Err(migration_error(err));
+                    }
+                    Err(_) => continue,
+                };
             if scan.push(line.item) == ModelContextScanProgress::Complete {
                 let mut items = scan.finish(session_meta);
                 items.retain(|item| !matches!(item, RolloutItem::SessionMeta(_)));

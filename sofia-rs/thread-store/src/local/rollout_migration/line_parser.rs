@@ -14,11 +14,29 @@ use serde_json::Value;
 use sofia_rollout::RolloutLine;
 use sofia_utils_path_uri::LegacyAppPathString;
 use sofia_utils_path_uri::PathUri;
+use std::path::Path;
 
 /// Parse one legacy rollout line after applying narrowly scoped compatibility
 /// rewrites for historical wire shapes that current protocol types no longer
 /// accept.
 pub(super) fn parse_legacy_rollout_line(bytes: &[u8]) -> Result<Option<RolloutLine>, String> {
+    parse_legacy_rollout_line_with(bytes, sofia_rollout::decode_rollout_line)
+}
+
+/// Like [`parse_legacy_rollout_line`], but resolves image blob references against `rollout_path`.
+pub(super) fn parse_legacy_rollout_line_for_rollout(
+    bytes: &[u8],
+    rollout_path: &Path,
+) -> Result<Option<RolloutLine>, String> {
+    parse_legacy_rollout_line_with(bytes, |value| {
+        sofia_rollout::decode_rollout_line_for_rollout(value, rollout_path)
+    })
+}
+
+fn parse_legacy_rollout_line_with(
+    bytes: &[u8],
+    decode: impl FnOnce(Value) -> serde_json::Result<RolloutLine>,
+) -> Result<Option<RolloutLine>, String> {
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Ok(None);
     }
@@ -27,10 +45,23 @@ pub(super) fn parse_legacy_rollout_line(bytes: &[u8]) -> Result<Option<RolloutLi
     // payloads fail serde_json's streaming enum path but deserialize correctly
     // once their tagged object shape has been materialized.
     let value = serde_json::from_slice::<Value>(bytes).map_err(|error| error.to_string())?;
-    parse_legacy_rollout_value(value)
+    parse_legacy_rollout_value_with(value, decode)
 }
 
-pub(super) fn parse_legacy_rollout_value(mut value: Value) -> Result<Option<RolloutLine>, String> {
+/// Parses a legacy rollout value, resolving image blob references against `rollout_path`.
+pub(super) fn parse_legacy_rollout_value_for_rollout(
+    value: Value,
+    rollout_path: &Path,
+) -> Result<Option<RolloutLine>, String> {
+    parse_legacy_rollout_value_with(value, |value| {
+        sofia_rollout::decode_rollout_line_for_rollout(value, rollout_path)
+    })
+}
+
+fn parse_legacy_rollout_value_with(
+    mut value: Value,
+    decode: impl FnOnce(Value) -> serde_json::Result<RolloutLine>,
+) -> Result<Option<RolloutLine>, String> {
     if should_skip_retired_record(&value) {
         return Ok(None);
     }
@@ -39,9 +70,7 @@ pub(super) fn parse_legacy_rollout_value(mut value: Value) -> Result<Option<Roll
     normalize_legacy_rate_limit_resets(&mut value);
     normalize_legacy_review_entry(&mut value);
     normalize_legacy_command_cwd(&mut value)?;
-    sofia_rollout::decode_rollout_line(value)
-        .map(Some)
-        .map_err(|error| error.to_string())
+    decode(value).map(Some).map_err(|error| error.to_string())
 }
 
 fn should_skip_retired_record(value: &Value) -> bool {

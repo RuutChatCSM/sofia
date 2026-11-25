@@ -23,10 +23,12 @@ sofia-otel = { workspace = true }
 sofia-protocol = { workspace = true }
 sofia-state = { workspace = true }
 sofia-utils-absolute-path = { workspace = true }
+sofia-utils-home-dir = { workspace = true }
 sofia-utils-path = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true, features = [
     "formatting",

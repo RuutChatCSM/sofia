@@ -5,11 +5,13 @@ use crate::ResponseItemEnvelope;
 use crate::RolloutItem;
 use crate::RolloutLine;
 use crate::config::RolloutConfig;
+use crate::image_blobs::ImageBlobStore;
 use chrono::TimeZone;
 use pretty_assertions::assert_eq;
 use sofia_protocol::SanitizedGitUrl;
 use sofia_protocol::SessionId;
 use sofia_protocol::ThreadId;
+use sofia_protocol::models::ContentItem;
 use sofia_protocol::models::ResponseItem;
 use sofia_protocol::protocol::AgentMessageEvent;
 use sofia_protocol::protocol::AskForApproval;
@@ -108,6 +110,103 @@ fn read_rollout_lines(path: &Path) -> std::io::Result<Vec<RolloutLine>> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| crate::parse_rollout_line(line).map_err(std::io::Error::other))
         .collect()
+}
+
+fn image_item(data_url: &str) -> RolloutItem {
+    RolloutItem::ResponseItem(ResponseItemEnvelope::from(ResponseItem::Message {
+        id: None,
+        role: "user".to_string(),
+        content: vec![ContentItem::InputImage {
+            image_url: data_url.to_string(),
+            detail: None,
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    }))
+}
+
+fn image_urls(items: &[RolloutItem]) -> Vec<String> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let RolloutItem::ResponseItem(envelope) = item else {
+                return None;
+            };
+            let ResponseItem::Message { content, .. } = &envelope.item else {
+                return None;
+            };
+            content.iter().find_map(|item| match item {
+                ContentItem::InputImage { image_url, .. } => Some(image_url.clone()),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+fn image_blob_files(home: &Path) -> Vec<PathBuf> {
+    let root = home.join("blobs/sha256");
+    let Ok(directories) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut files = Vec::new();
+    for directory in directories {
+        let directory = directory.expect("blob shard entry");
+        for file in fs::read_dir(directory.path()).expect("blob shard") {
+            files.push(file.expect("blob file").path());
+        }
+    }
+    files
+}
+
+#[tokio::test]
+async fn new_rollouts_externalize_images_and_resume_preserves_format() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let recorder = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::new(
+            ThreadId::new(),
+            /*forked_from_id*/ None,
+            /*parent_thread_id*/ None,
+            SessionSource::Exec,
+            /*thread_source*/ None,
+            "test_originator".to_string(),
+            BaseInstructions::default(),
+            Vec::new(),
+        )
+        .with_history_mode(ThreadHistoryMode::Paginated),
+    )
+    .await?;
+    let image = format!("data:image/png;base64,{}", "A".repeat(20 * 1024));
+
+    recorder
+        .record_canonical_items(&[image_item(image.as_str())])
+        .await?;
+    recorder.flush().await?;
+    let rollout_path = recorder.rollout_path().to_path_buf();
+    let raw = fs::read_to_string(&rollout_path)?;
+    assert!(raw.contains("\"history_mode\":\"paginated_blob_v1\""));
+    assert!(raw.contains("sofia-blob:sha256:"));
+    assert!(!raw.contains(image.as_str()));
+    assert_eq!(image_blob_files(home.path()).len(), 1);
+    recorder.shutdown().await?;
+
+    let resumed =
+        RolloutRecorder::new(&config, RolloutRecorderParams::resume(rollout_path.clone())).await?;
+    resumed
+        .record_canonical_items(&[image_item(image.as_str())])
+        .await?;
+    resumed.flush().await?;
+    resumed.shutdown().await?;
+
+    let raw = fs::read_to_string(&rollout_path)?;
+    assert_eq!(raw.matches("sofia-blob:sha256:").count(), 2);
+    assert!(!raw.contains(image.as_str()));
+    assert_eq!(image_blob_files(home.path()).len(), 1);
+
+    let (items, _, _) = RolloutRecorder::load_rollout_items(&rollout_path).await?;
+    assert_eq!(image_urls(&items), vec![image.clone(), image]);
+    Ok(())
 }
 
 fn write_session_file(root: &Path, ts: &str, uuid: Uuid) -> std::io::Result<PathBuf> {
@@ -948,6 +1047,7 @@ async fn writer_state_retries_write_error_before_reporting_flush_success() -> st
     let mut state = RolloutWriterState {
         writer: Some(JsonlWriter {
             file: tokio::fs::File::from_std(read_only_file),
+            image_blobs: None,
         }),
         deferred_creation: false,
         pending_items: Vec::new(),
@@ -955,6 +1055,8 @@ async fn writer_state_retries_write_error_before_reporting_flush_success() -> st
         cwd: home.path().to_path_buf(),
         rollout_path: rollout_path.clone(),
         ordinal_state: RolloutOrdinalState::Legacy,
+        image_blob_store: ImageBlobStore::for_home(home.path()),
+        image_blob_refs: false,
         last_logged_error: None,
     };
     state.add_items(vec![RolloutItem::EventMsg(EventMsg::AgentMessage(

@@ -1,5 +1,6 @@
 //! Rollout persistence and discovery for Sofia session files.
 
+use std::path::Path;
 use std::sync::LazyLock;
 
 use serde::de::Error as _;
@@ -8,6 +9,7 @@ use sofia_protocol::protocol::SessionSource;
 
 pub(crate) mod compression;
 pub(crate) mod config;
+mod image_blobs;
 pub(crate) mod list;
 mod maintenance;
 pub(crate) mod metadata;
@@ -47,6 +49,28 @@ pub(crate) use sofia_protocol::protocol;
 /// remains format-neutral and resume and projection use the same item decoder.
 /// Remove it once Serde supports format-specific buffering.
 pub fn decode_rollout_line(value: Value) -> serde_json::Result<RolloutLine> {
+    decode_rollout_line_with_image_blobs(value, &image_blobs::ImageBlobStore::default_roots())
+}
+
+/// Decodes a rollout line, resolving `sofia-blob:sha256:` references against the Sofia home that
+/// owns `rollout_path`.
+pub fn decode_rollout_line_for_rollout(
+    value: Value,
+    rollout_path: &Path,
+) -> serde_json::Result<RolloutLine> {
+    decode_rollout_line_with_image_blobs(
+        value,
+        &image_blobs::ImageBlobStore::for_rollout_path(rollout_path),
+    )
+}
+
+pub(crate) fn decode_rollout_line_with_image_blobs(
+    mut value: Value,
+    image_blobs: &image_blobs::ImageBlobStore,
+) -> serde_json::Result<RolloutLine> {
+    image_blobs::resolve_images_in_value(&mut value, image_blobs).map_err(|err| {
+        serde_json::Error::custom(format!("{}{err}", image_blobs::IMAGE_BLOB_ERROR_PREFIX))
+    })?;
     let Value::Object(mut fields) = value else {
         return Err(serde_json::Error::custom(
             "rollout line must be a JSON object",
@@ -75,9 +99,39 @@ pub fn parse_rollout_line(line: &str) -> serde_json::Result<RolloutLine> {
     serde_json::from_str::<Value>(line).and_then(decode_rollout_line)
 }
 
+/// Parses a persisted rollout record, resolving image blob references against `rollout_path`'s
+/// Sofia home.
+pub fn parse_rollout_line_for_rollout(
+    line: &str,
+    rollout_path: &Path,
+) -> serde_json::Result<RolloutLine> {
+    serde_json::from_str::<Value>(line)
+        .and_then(|value| decode_rollout_line_for_rollout(value, rollout_path))
+}
+
 /// Parses persisted JSONL rollout record bytes through the canonical JSON decoder.
 pub fn parse_rollout_line_bytes(bytes: &[u8]) -> serde_json::Result<RolloutLine> {
     serde_json::from_slice::<Value>(bytes).and_then(decode_rollout_line)
+}
+
+/// Parses persisted rollout record bytes, resolving image blob references against `rollout_path`'s
+/// Sofia home.
+pub fn parse_rollout_line_bytes_for_rollout(
+    bytes: &[u8],
+    rollout_path: &Path,
+) -> serde_json::Result<RolloutLine> {
+    serde_json::from_slice::<Value>(bytes)
+        .and_then(|value| decode_rollout_line_for_rollout(value, rollout_path))
+}
+
+/// Returns true when a rollout decode failed because an image blob reference could not be resolved.
+pub fn is_image_blob_error(error: &serde_json::Error) -> bool {
+    image_blobs::is_image_blob_error(error)
+}
+
+/// Returns true when a stringified rollout decode error came from image blob resolution.
+pub fn is_image_blob_error_message(message: &str) -> bool {
+    image_blobs::is_image_blob_error_message(message)
 }
 
 pub const SESSIONS_SUBDIR: &str = "sessions";

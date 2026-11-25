@@ -98,7 +98,10 @@ async fn latest_thread_cwd(path: Option<PathBuf>, fallback: PathBuf) -> PathBuf 
     tokio::task::spawn_blocking(move || {
         let reader = sofia_rollout::open_rollout_seekable_reader(&path).ok()?;
         let mut scanner = sofia_rollout::ReverseJsonlScanner::new(reader).ok()?;
-        while let Some(outcome) = scanner.scan_next_rollout_line().ok()? {
+        while let Some(outcome) = scanner
+            .scan_next_rollout_line_for_rollout(path.as_path())
+            .ok()?
+        {
             if let sofia_rollout::ScanOutcome::Parsed(sofia_rollout::RolloutLine {
                 item: sofia_rollout::RolloutItem::TurnContext(item),
                 ..

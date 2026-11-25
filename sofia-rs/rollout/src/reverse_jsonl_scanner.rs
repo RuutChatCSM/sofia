@@ -2,11 +2,13 @@ use std::io;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::path::Path;
 
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::RolloutLine;
+use crate::image_blobs::ImageBlobStore;
 
 const READ_CHUNK_SIZE: usize = 64 * 1024;
 
@@ -133,13 +135,37 @@ where
 
     /// Scans the next rollout record through the canonical persisted JSON decoder.
     pub fn scan_next_rollout_line(&mut self) -> io::Result<Option<ScanOutcome<RolloutLine>>> {
-        Ok(self.scan_next::<Value>()?.map(|outcome| match outcome {
-            ScanOutcome::Parsed(value) => match crate::decode_rollout_line(value) {
-                Ok(line) => ScanOutcome::Parsed(line),
-                Err(error) => ScanOutcome::Rejected(error),
-            },
-            ScanOutcome::Rejected(error) => ScanOutcome::Rejected(error),
-        }))
+        self.scan_next_rollout_line_with(&ImageBlobStore::default_roots())
+    }
+
+    /// Scans the next rollout record, resolving image blob references against `rollout_path`'s
+    /// Sofia home.
+    pub fn scan_next_rollout_line_for_rollout(
+        &mut self,
+        rollout_path: &Path,
+    ) -> io::Result<Option<ScanOutcome<RolloutLine>>> {
+        self.scan_next_rollout_line_with(&ImageBlobStore::for_rollout_path(rollout_path))
+    }
+
+    fn scan_next_rollout_line_with(
+        &mut self,
+        image_blobs: &ImageBlobStore,
+    ) -> io::Result<Option<ScanOutcome<RolloutLine>>> {
+        let Some(outcome) = self.scan_next::<Value>()? else {
+            return Ok(None);
+        };
+        match outcome {
+            ScanOutcome::Parsed(value) => {
+                match crate::decode_rollout_line_with_image_blobs(value, image_blobs) {
+                    Ok(line) => Ok(Some(ScanOutcome::Parsed(line))),
+                    Err(error) if crate::is_image_blob_error(&error) => {
+                        Err(io::Error::other(error))
+                    }
+                    Err(error) => Ok(Some(ScanOutcome::Rejected(error))),
+                }
+            }
+            ScanOutcome::Rejected(error) => Ok(Some(ScanOutcome::Rejected(error))),
+        }
     }
 
     fn finish_record<T>(&mut self) -> Option<ScanOutcome<T>>
