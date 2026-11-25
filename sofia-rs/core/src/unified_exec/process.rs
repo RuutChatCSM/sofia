@@ -33,6 +33,7 @@ use super::UNIFIED_EXEC_OUTPUT_MAX_BYTES;
 use super::UNIFIED_EXEC_OUTPUT_MAX_TOKENS;
 use super::UnifiedExecError;
 use super::head_tail_buffer::HeadTailBuffer;
+use super::poll_backoff::PollBackoff;
 use super::process_state::ProcessState;
 
 const EARLY_EXIT_GRACE_PERIOD: Duration = Duration::from_millis(150);
@@ -98,6 +99,7 @@ pub(crate) struct UnifiedExecProcess {
     output_task: Option<JoinHandle<()>>,
     sandbox_type: SandboxType,
     timed_out: AtomicBool,
+    pub(super) poll_backoff: std::sync::Mutex<PollBackoff>,
     _spawn_lifecycle: Option<SpawnLifecycleHandle>,
 }
 
@@ -139,6 +141,7 @@ impl UnifiedExecProcess {
             output_task: None,
             sandbox_type,
             timed_out: AtomicBool::new(false),
+            poll_backoff: std::sync::Mutex::new(PollBackoff::default()),
             _spawn_lifecycle: spawn_lifecycle,
         }
     }
