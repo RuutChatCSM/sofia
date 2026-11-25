@@ -111,7 +111,9 @@ pub(super) async fn load_for_fork(
                     Some(end_byte_offset) => ReverseJsonlScanner::new_at(file, end_byte_offset)?,
                     None => ReverseJsonlScanner::new(file)?,
                 };
-                while let Some(outcome) = scanner.scan_next_rollout_line()? {
+                while let Some(outcome) =
+                    scanner.scan_next_rollout_line_for_rollout(segment.rollout_path.as_path())?
+                {
                     let ScanOutcome::Parsed(line) = outcome else {
                         continue;
                     };
@@ -175,7 +177,9 @@ fn scan_model_context_from_lineage_blocking(
             Some(end_byte_offset) => ReverseJsonlScanner::new_at(file, end_byte_offset)?,
             None => ReverseJsonlScanner::new(file)?,
         };
-        while let Some(outcome) = scanner.scan_next_rollout_line()? {
+        while let Some(outcome) =
+            scanner.scan_next_rollout_line_for_rollout(segment.rollout_path.as_path())?
+        {
             let ScanOutcome::Parsed(line) = outcome else {
                 continue;
             };

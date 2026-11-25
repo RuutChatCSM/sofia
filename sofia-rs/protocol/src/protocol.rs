@@ -775,16 +775,43 @@ pub enum ThreadMemoryMode {
 #[ts(rename_all = "lowercase")]
 pub enum ThreadHistoryMode {
     #[default]
+    #[serde(alias = "legacy_blob_v1")]
     Legacy,
+    #[serde(alias = "paginated_blob_v1")]
     Paginated,
 }
 
 impl ThreadHistoryMode {
+    /// Rollout history-mode value stamped on newly created legacy rollouts whose large images
+    /// are stored once in the content-addressed image blob store.
+    ///
+    /// Older binaries deserialize `history_mode` as a strict enum, so they reject this value and
+    /// fail loudly instead of treating `sofia-blob:` references as image data URLs.
+    pub const LEGACY_IMAGE_BLOB_V1: &'static str = "legacy_blob_v1";
+    /// Paginated counterpart of [`Self::LEGACY_IMAGE_BLOB_V1`].
+    pub const PAGINATED_IMAGE_BLOB_V1: &'static str = "paginated_blob_v1";
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Legacy => "legacy",
             Self::Paginated => "paginated",
         }
+    }
+
+    /// History-mode value written to a rollout that stores large images as blob references.
+    pub const fn image_blob_guard(self) -> &'static str {
+        match self {
+            Self::Legacy => Self::LEGACY_IMAGE_BLOB_V1,
+            Self::Paginated => Self::PAGINATED_IMAGE_BLOB_V1,
+        }
+    }
+
+    /// Returns true when `value` is an image-blob format guard written by [`Self::image_blob_guard`].
+    pub fn is_image_blob_guard(value: &str) -> bool {
+        matches!(
+            value,
+            Self::LEGACY_IMAGE_BLOB_V1 | Self::PAGINATED_IMAGE_BLOB_V1
+        )
     }
 }
 
@@ -793,8 +820,8 @@ impl FromStr for ThreadHistoryMode {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "legacy" => Ok(Self::Legacy),
-            "paginated" => Ok(Self::Paginated),
+            "legacy" | Self::LEGACY_IMAGE_BLOB_V1 => Ok(Self::Legacy),
+            "paginated" | Self::PAGINATED_IMAGE_BLOB_V1 => Ok(Self::Paginated),
             _ => Err(format!("unknown thread history mode `{value}`")),
         }
     }

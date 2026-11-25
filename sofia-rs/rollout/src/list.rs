@@ -13,6 +13,7 @@ use time::PrimitiveDateTime;
 use time::format_description::FormatItem;
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
+use tracing::warn;
 use uuid::Uuid;
 
 use super::ARCHIVED_SESSIONS_SUBDIR;
@@ -792,9 +793,17 @@ async fn build_thread_item(
 ) -> Option<ThreadItem> {
     // Read head and detect preview-bearing events; goal previews can appear before
     // the first normal user message.
-    let summary = read_head_summary(&path, HEAD_RECORD_LIMIT)
-        .await
-        .unwrap_or_default();
+    let summary = match read_head_summary(&path, HEAD_RECORD_LIMIT).await {
+        Ok(summary) => summary,
+        Err(error) => {
+            warn!(
+                rollout_path = %path.display(),
+                error = %error,
+                "failed to read thread summary"
+            );
+            return None;
+        }
+    };
     if !allowed_sources.is_empty()
         && !summary
             .source
@@ -1135,9 +1144,15 @@ async fn read_head_summary(path: &Path, head_limit: usize) -> io::Result<HeadTai
         }
         lines_scanned += 1;
 
-        let parsed = crate::parse_rollout_line(trimmed);
+        let parsed = crate::parse_rollout_line_for_rollout(trimmed, path);
         let rollout_line = match parsed {
             Ok(rollout_line) => rollout_line,
+            Err(error) if crate::is_image_blob_error(&error) => {
+                return Err(io::Error::other(format!(
+                    "failed to resolve image blob in rollout {}: {error}",
+                    path.display()
+                )));
+            }
             Err(_) => {
                 if !summary.saw_session_meta
                     && let Ok(value) = serde_json::from_str::<Value>(trimmed)
@@ -1250,33 +1265,41 @@ pub async fn read_head_for_summary(path: &Path) -> io::Result<Vec<serde_json::Va
         if trimmed.is_empty() {
             continue;
         }
-        if let Ok(rollout_line) = crate::parse_rollout_line(trimmed) {
-            match rollout_line.item {
-                RolloutItem::SessionMeta(session_meta_line) => {
-                    if let Ok(value) = serde_json::to_value(session_meta_line) {
-                        head.push(value);
-                    }
-                }
-                RolloutItem::ResponseItem(item) => {
-                    if let Ok(value) = serde_json::to_value(&item.item) {
-                        head.push(value);
-                    }
-                }
-                RolloutItem::InterAgentCommunication(communication) => {
-                    if let Ok(value) = serde_json::to_value(communication.to_model_input_item()) {
-                        head.push(value);
-                    }
-                }
-                RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::Compacted(_)
-                | RolloutItem::TurnContext(_)
-                | RolloutItem::TokenUsageRecord(_)
-                | RolloutItem::WorldState(_)
-                | RolloutItem::RealtimeItem(_)
-                | RolloutItem::RetainedContext(_)
-                | RolloutItem::SecurityRiskScore(_)
-                | RolloutItem::EventMsg(_) => {}
+        let rollout_line = match crate::parse_rollout_line_for_rollout(trimmed, path) {
+            Ok(rollout_line) => rollout_line,
+            Err(error) if crate::is_image_blob_error(&error) => {
+                return Err(io::Error::other(format!(
+                    "failed to resolve image blob in rollout {}: {error}",
+                    path.display()
+                )));
             }
+            Err(_) => continue,
+        };
+        match rollout_line.item {
+            RolloutItem::SessionMeta(session_meta_line) => {
+                if let Ok(value) = serde_json::to_value(session_meta_line) {
+                    head.push(value);
+                }
+            }
+            RolloutItem::ResponseItem(item) => {
+                if let Ok(value) = serde_json::to_value(&item.item) {
+                    head.push(value);
+                }
+            }
+            RolloutItem::InterAgentCommunication(communication) => {
+                if let Ok(value) = serde_json::to_value(communication.to_model_input_item()) {
+                    head.push(value);
+                }
+            }
+            RolloutItem::InterAgentCommunicationMetadata { .. }
+            | RolloutItem::Compacted(_)
+            | RolloutItem::TurnContext(_)
+            | RolloutItem::TokenUsageRecord(_)
+            | RolloutItem::WorldState(_)
+            | RolloutItem::RealtimeItem(_)
+            | RolloutItem::RetainedContext(_)
+            | RolloutItem::SecurityRiskScore(_)
+            | RolloutItem::EventMsg(_) => {}
         }
     }
 
@@ -1309,11 +1332,20 @@ pub async fn read_session_meta_line(path: &Path) -> io::Result<SessionMetaLine> 
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(rollout_line) = crate::parse_rollout_line(trimmed) else {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                crate::recorder::reject_unknown_thread_history_mode(&value)?;
+        let rollout_line = match crate::parse_rollout_line_for_rollout(trimmed, path) {
+            Ok(rollout_line) => rollout_line,
+            Err(error) if crate::is_image_blob_error(&error) => {
+                return Err(io::Error::other(format!(
+                    "failed to resolve image blob in rollout {}: {error}",
+                    path.display()
+                )));
             }
-            continue;
+            Err(_) => {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                    crate::recorder::reject_unknown_thread_history_mode(&value)?;
+                }
+                continue;
+            }
         };
         match rollout_line.item {
             RolloutItem::SessionMeta(session_meta_line) => return Ok(session_meta_line),

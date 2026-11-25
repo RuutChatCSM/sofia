@@ -19,6 +19,11 @@ pub(crate) enum RolloutOrdinalState {
     Paginated { next: Option<u64> },
 }
 
+pub(crate) struct RolloutHeadState {
+    pub(crate) ordinal: RolloutOrdinalState,
+    pub(crate) image_blob_refs: bool,
+}
+
 impl RolloutOrdinalState {
     pub(crate) fn for_new_rollout(
         history_mode: ThreadHistoryMode,
@@ -55,18 +60,25 @@ impl RolloutOrdinalState {
 pub(crate) fn ordinal_state_for_rollout(
     file: &mut File,
     path: &Path,
-) -> io::Result<RolloutOrdinalState> {
-    let Some((history_mode, subagent_history_start_ordinal)) = read_history_metadata(file, path)?
+) -> io::Result<RolloutHeadState> {
+    let Some((history_mode, subagent_history_start_ordinal, image_blob_refs)) =
+        read_history_metadata(file, path)?
     else {
-        return Ok(RolloutOrdinalState::Legacy);
+        return Ok(RolloutHeadState {
+            ordinal: RolloutOrdinalState::Legacy,
+            image_blob_refs: false,
+        });
     };
     if matches!(history_mode, ThreadHistoryMode::Legacy) {
-        return Ok(RolloutOrdinalState::Legacy);
+        return Ok(RolloutHeadState {
+            ordinal: RolloutOrdinalState::Legacy,
+            image_blob_refs,
+        });
     }
 
     let mut scanner = ReverseJsonlScanner::new(file)?;
     let record = loop {
-        match scanner.scan_next_rollout_line()? {
+        match scanner.scan_next_rollout_line_for_rollout(path)? {
             Some(ScanOutcome::Parsed(record)) => break record,
             Some(ScanOutcome::Rejected(_)) => continue,
             None => {
@@ -94,15 +106,18 @@ pub(crate) fn ordinal_state_for_rollout(
             path.display()
         )));
     }
-    Ok(RolloutOrdinalState::Paginated {
-        next: ordinal.checked_add(1),
+    Ok(RolloutHeadState {
+        ordinal: RolloutOrdinalState::Paginated {
+            next: ordinal.checked_add(1),
+        },
+        image_blob_refs,
     })
 }
 
 fn read_history_metadata(
     file: &mut File,
     path: &Path,
-) -> io::Result<Option<(ThreadHistoryMode, Option<u64>)>> {
+) -> io::Result<Option<(ThreadHistoryMode, Option<u64>, bool)>> {
     file.seek(SeekFrom::Start(0))?;
     let reader = BufReader::new(file);
     for line in reader.lines() {
@@ -110,7 +125,18 @@ fn read_history_metadata(
         if line.trim().is_empty() {
             continue;
         }
-        let record = crate::parse_rollout_line(line.as_str()).map_err(|error| {
+        let value = serde_json::from_str::<serde_json::Value>(line.as_str()).map_err(|error| {
+            io::Error::other(format!(
+                "failed to parse first rollout record at {}: {error}",
+                path.display()
+            ))
+        })?;
+        let image_blob_refs = value
+            .get("payload")
+            .and_then(|payload| payload.get("history_mode"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(ThreadHistoryMode::is_image_blob_guard);
+        let record = crate::decode_rollout_line_for_rollout(value, path).map_err(|error| {
             io::Error::other(format!(
                 "failed to parse first rollout record at {}: {error}",
                 path.display()
@@ -125,6 +151,7 @@ fn read_history_metadata(
         return Ok(Some((
             session_meta.meta.history_mode,
             session_meta.meta.subagent_history_start_ordinal,
+            image_blob_refs,
         )));
     }
     Ok(None)

@@ -58,6 +58,8 @@ use crate::InitialHistory;
 use crate::ResumedHistory;
 use crate::RolloutItem;
 use crate::config::RolloutConfigView;
+use crate::image_blobs;
+use crate::image_blobs::ImageBlobStore;
 use crate::state_db;
 use crate::state_db::StateDbHandle;
 use sofia_git_utils::collect_git_info;
@@ -838,6 +840,8 @@ impl RolloutRecorder {
     ) -> std::io::Result<Self> {
         // Clone the cwd for the spawned task to collect git info asynchronously.
         let cwd = config.cwd().to_path_buf();
+        image_blobs::register_sofia_home(config.sofia_home());
+        let image_blob_store = ImageBlobStore::for_home(config.sofia_home());
         let state = match params {
             RolloutRecorderParams::Create {
                 session_id,
@@ -911,19 +915,27 @@ impl RolloutRecorder {
                     cwd: cwd.clone(),
                     rollout_path: path,
                     ordinal_state,
+                    image_blob_store,
+                    image_blob_refs: true,
                     last_logged_error: None,
                 }
             }
             RolloutRecorderParams::Resume { path } => {
-                let (path, file, ordinal_state) = open_rollout_for_append(path.as_path()).await?;
+                let (path, file, ordinal_state, image_blob_refs) =
+                    open_rollout_for_append(path.as_path()).await?;
                 RolloutWriterState {
-                    writer: Some(JsonlWriter { file }),
+                    writer: Some(JsonlWriter {
+                        file,
+                        image_blobs: image_blob_refs.then(|| image_blob_store.clone()),
+                    }),
                     deferred_creation: false,
                     pending_items: Vec::new(),
                     meta: None,
                     cwd: cwd.clone(),
                     rollout_path: path,
                     ordinal_state,
+                    image_blob_store,
+                    image_blob_refs,
                     last_logged_error: None,
                 }
             }
@@ -1056,8 +1068,14 @@ impl RolloutRecorder {
                 reject_unknown_thread_history_mode(&value)?;
             }
 
-            let rollout_line = match crate::decode_rollout_line(value) {
+            let rollout_line = match crate::decode_rollout_line_for_rollout(value, path) {
                 Ok(rollout_line) => rollout_line,
+                Err(e) if crate::is_image_blob_error(&e) => {
+                    return Err(IoError::other(format!(
+                        "failed to resolve image blob in rollout {}: {e}",
+                        path.display()
+                    )));
+                }
                 Err(e) => {
                     trace!("failed to parse rollout line: {e}");
                     parse_errors = parse_errors.saturating_add(1);
@@ -1692,6 +1710,8 @@ struct RolloutWriterState {
     cwd: PathBuf,
     rollout_path: PathBuf,
     ordinal_state: RolloutOrdinalState,
+    image_blob_store: ImageBlobStore,
+    image_blob_refs: bool,
     last_logged_error: Option<String>,
 }
 
@@ -1781,6 +1801,7 @@ impl RolloutWriterState {
         let file = open_log_file(self.rollout_path.as_path())?;
         self.writer = Some(JsonlWriter {
             file: tokio::fs::File::from_std(file),
+            image_blobs: self.image_blob_refs.then(|| self.image_blob_store.clone()),
         });
         self.deferred_creation = false;
         Ok(())
@@ -1883,6 +1904,7 @@ async fn write_session_meta(
     session_meta: SessionMeta,
     cwd: &Path,
 ) -> std::io::Result<()> {
+    let image_blob_guard = session_meta.history_mode.image_blob_guard();
     let git_info = if get_git_repo_root(cwd).is_some() {
         collect_git_info(cwd).await.map(|info| ProtocolGitInfo {
             commit_hash: info.commit_hash,
@@ -1900,7 +1922,16 @@ async fn write_session_meta(
     let rollout_item = RolloutItem::SessionMeta(session_meta_line);
     if let Some(writer) = writer.as_mut() {
         let ordinal = ordinal_state.current()?;
-        writer.write_rollout_item(&rollout_item, ordinal).await?;
+        let mut value = writer.rollout_line_value(&rollout_item, ordinal)?;
+        if writer.image_blobs.is_some()
+            && let Some(payload) = value.get_mut("payload").and_then(Value::as_object_mut)
+        {
+            payload.insert(
+                "history_mode".to_string(),
+                Value::String(image_blob_guard.to_string()),
+            );
+        }
+        writer.write_value(value).await?;
         ordinal_state.advance();
     }
     Ok(())
@@ -1915,20 +1946,24 @@ pub async fn append_rollout_item_to_path(
     rollout_path: &Path,
     item: &RolloutItem,
 ) -> std::io::Result<()> {
-    let (_rollout_path, file, ordinal_state) = open_rollout_for_append(rollout_path).await?;
+    let (_rollout_path, file, ordinal_state, _image_blob_refs) =
+        open_rollout_for_append(rollout_path).await?;
     let ordinal = ordinal_state.current()?;
-    let mut writer = JsonlWriter { file };
+    let mut writer = JsonlWriter {
+        file,
+        image_blobs: None,
+    };
     writer.write_rollout_item(item, ordinal).await
 }
 
 async fn open_rollout_for_append(
     path: &Path,
-) -> std::io::Result<(PathBuf, tokio::fs::File, RolloutOrdinalState)> {
+) -> std::io::Result<(PathBuf, tokio::fs::File, RolloutOrdinalState, bool)> {
     let refresh_modified_time =
         !tokio::fs::try_exists(compression::plain_rollout_path(path)).await?;
     let path = compression::materialize_rollout_for_append(path).await?;
     let path_for_open = path.clone();
-    let (file, ordinal_state) = tokio::task::spawn_blocking(move || {
+    let (file, ordinal_state, image_blob_refs) = tokio::task::spawn_blocking(move || {
         let mut file = File::options()
             .read(true)
             .append(true)
@@ -1937,12 +1972,17 @@ async fn open_rollout_for_append(
             file.set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::now()))?;
         }
         ensure_rollout_is_newline_terminated(&mut file)?;
-        let ordinal_state = ordinal_state_for_rollout(&mut file, path_for_open.as_path())?;
-        Ok::<_, std::io::Error>((file, ordinal_state))
+        let head_state = ordinal_state_for_rollout(&mut file, path_for_open.as_path())?;
+        Ok::<_, std::io::Error>((file, head_state.ordinal, head_state.image_blob_refs))
     })
     .await
     .map_err(IoError::other)??;
-    Ok((path, tokio::fs::File::from_std(file), ordinal_state))
+    Ok((
+        path,
+        tokio::fs::File::from_std(file),
+        ordinal_state,
+        image_blob_refs,
+    ))
 }
 
 fn ensure_rollout_is_newline_terminated(file: &mut File) -> std::io::Result<()> {
@@ -1962,6 +2002,7 @@ fn ensure_rollout_is_newline_terminated(file: &mut File) -> std::io::Result<()> 
 
 struct JsonlWriter {
     file: tokio::fs::File,
+    image_blobs: Option<ImageBlobStore>,
 }
 
 #[derive(serde::Serialize)]
@@ -1974,27 +2015,39 @@ struct RolloutLineRef<'a> {
 }
 
 impl JsonlWriter {
-    async fn write_rollout_item(
-        &mut self,
+    fn rollout_line_value(
+        &self,
         rollout_item: &RolloutItem,
         ordinal: Option<u64>,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Value> {
         let timestamp_format: &[FormatItem] = format_description!(
             "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
         );
         let timestamp = OffsetDateTime::now_utc()
             .format(timestamp_format)
             .map_err(|e| IoError::other(format!("failed to format timestamp: {e}")))?;
-
-        let line = RolloutLineRef {
+        serde_json::to_value(RolloutLineRef {
             timestamp,
             ordinal,
             item: rollout_item,
-        };
-        self.write_line(&line).await
+        })
+        .map_err(std::io::Error::from)
     }
-    async fn write_line(&mut self, item: &impl serde::Serialize) -> std::io::Result<()> {
-        let mut json = serde_json::to_string(item)?;
+
+    async fn write_rollout_item(
+        &mut self,
+        rollout_item: &RolloutItem,
+        ordinal: Option<u64>,
+    ) -> std::io::Result<()> {
+        let value = self.rollout_line_value(rollout_item, ordinal)?;
+        self.write_value(value).await
+    }
+
+    async fn write_value(&mut self, mut value: Value) -> std::io::Result<()> {
+        if let Some(image_blobs) = &self.image_blobs {
+            image_blobs::externalize_images_in_value(&mut value, image_blobs)?;
+        }
+        let mut json = serde_json::to_string(&value)?;
         json.push('\n');
         self.file.write_all(json.as_bytes()).await?;
         self.file.flush().await?;

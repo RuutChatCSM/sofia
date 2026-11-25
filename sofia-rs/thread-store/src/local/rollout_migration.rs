@@ -681,7 +681,7 @@ impl LocalThreadStore {
         // instead of buffering the prefix in memory.
         let canonical_session_meta = loop {
             let record = with_failure_reason(
-                read_rollout_record(&mut source, &mut bytes).await,
+                read_rollout_record(&mut source, &mut bytes, source_path).await,
                 RolloutMigrationFailureReason::RolloutReadFailed,
             )?
             .ok_or_else(|| {
@@ -841,7 +841,7 @@ impl LocalThreadStore {
         let mut source = BufReader::with_capacity(PROJECTION_BATCH_BYTES as usize, source_file);
         let mut bytes = Vec::new();
         let mut planner = RollbackPlanner::new();
-        while let Some(record) = read_rollout_record(&mut source, &mut bytes).await? {
+        while let Some(record) = read_rollout_record(&mut source, &mut bytes, source_path).await? {
             limiter.account(record.byte_count).await;
             if let Some(line) = record.line {
                 planner.observe(&line)?;
@@ -949,7 +949,9 @@ impl LocalThreadStore {
         limiter.account(written).await;
         let mut last_timestamp = input.canonical_session_meta.timestamp.clone();
 
-        while let Some(record) = read_rollout_record(&mut source, &mut bytes).await? {
+        while let Some(record) =
+            read_rollout_record(&mut source, &mut bytes, input.source_path).await?
+        {
             limiter.account(record.byte_count).await;
             let Some(line) = record.line else {
                 continue;
@@ -1137,7 +1139,9 @@ impl LocalThreadStore {
         let mut batch_start = 0_u64;
         let mut offset = 0_u64;
 
-        while let Some(record) = read_rollout_record(&mut reader, &mut line_bytes).await? {
+        while let Some(record) =
+            read_rollout_record(&mut reader, &mut line_bytes, rollout_path).await?
+        {
             let next_offset = offset
                 .checked_add(record.byte_count)
                 .ok_or_else(|| migration_error("staged rollout byte offset overflow"))?;
@@ -1207,6 +1211,7 @@ impl LocalThreadStore {
 async fn read_rollout_record(
     reader: &mut BufReader<File>,
     bytes: &mut Vec<u8>,
+    rollout_path: &Path,
 ) -> ThreadStoreResult<Option<RolloutRecord>> {
     bytes.clear();
     let mut byte_count = reader
@@ -1241,7 +1246,13 @@ async fn read_rollout_record(
     }
     // Legacy records do not have ordinals, so malformed complete records cannot be repaired.
     // Skip them and let the next newline-delimited record resynchronize the stream.
-    let line = line_parser::parse_legacy_rollout_line(bytes).unwrap_or(None);
+    let line = match line_parser::parse_legacy_rollout_line_for_rollout(bytes, rollout_path) {
+        Ok(line) => line,
+        Err(err) if sofia_rollout::is_image_blob_error_message(&err) => {
+            return Err(migration_error(err));
+        }
+        Err(_) => None,
+    };
     Ok(Some(RolloutRecord {
         line,
         byte_count: byte_count as u64,

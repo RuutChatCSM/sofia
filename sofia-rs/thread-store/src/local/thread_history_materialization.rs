@@ -164,8 +164,16 @@ async fn read_projection_steps(
             }
         };
         let raw_ordinal = value.get("ordinal").and_then(serde_json::Value::as_u64);
-        let line = match sofia_rollout::decode_rollout_line(value) {
+        let line = match sofia_rollout::decode_rollout_line_for_rollout(value, rollout_path) {
             Ok(line) => line,
+            Err(err) if sofia_rollout::is_image_blob_error(&err) => {
+                return Err(ThreadStoreError::Internal {
+                    message: format!(
+                        "failed to resolve image blob in rollout {}: {err}",
+                        rollout_path.display()
+                    ),
+                });
+            }
             Err(err) => {
                 warn!(
                     thread_id = %thread_id,

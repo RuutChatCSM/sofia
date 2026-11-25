@@ -183,7 +183,7 @@ pub async fn first_rollout_content_match_snippet(
     let search_term = case_insensitive_literal_regex(search_term)?;
     while let Some(line) = lines.next_line().await? {
         if json_search_term.is_match(line.as_str())
-            && let Some(snippet) = content_match_snippet(line.as_str(), &search_term)
+            && let Some(snippet) = content_match_snippet(path, line.as_str(), &search_term)?
         {
             return Ok(Some(snippet));
         }
@@ -246,10 +246,23 @@ fn case_insensitive_literal_regex(search_term: impl AsRef<str>) -> io::Result<Re
         .map_err(io::Error::other)
 }
 
-fn content_match_snippet(jsonl_line: &str, search_term: &Regex) -> Option<String> {
-    let rollout_line = crate::parse_rollout_line(jsonl_line.trim()).ok()?;
-    let text = conversation_text_from_item(&rollout_line.item)?;
-    excerpt_around_match(text.as_str(), search_term)
+fn content_match_snippet(
+    path: &Path,
+    jsonl_line: &str,
+    search_term: &Regex,
+) -> io::Result<Option<String>> {
+    let rollout_line = match crate::parse_rollout_line_for_rollout(jsonl_line.trim(), path) {
+        Ok(rollout_line) => rollout_line,
+        Err(error) if crate::is_image_blob_error(&error) => {
+            return Err(io::Error::other(format!(
+                "failed to resolve image blob in rollout {}: {error}",
+                path.display()
+            )));
+        }
+        Err(_) => return Ok(None),
+    };
+    Ok(conversation_text_from_item(&rollout_line.item)
+        .and_then(|text| excerpt_around_match(text.as_str(), search_term)))
 }
 
 fn conversation_text_from_item(item: &RolloutItem) -> Option<String> {
